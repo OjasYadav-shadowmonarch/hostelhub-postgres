@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HostelHub — Hostel Finder Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="toast" class="toast" aria-live="polite"></div>
+
+<!-- =================== PUBLIC LANDING PAGE =================== -->
+<div id="landingScreen" class="landing-screen">
+
+  <!-- ---------- Nav ---------- -->
+  <header class="l-nav">
+    <div class="l-nav-inner">
+      <a href="#top" class="l-logo"><span class="l-logo-mark" aria-hidden="true">🏠</span>HostelHub</a>
+
+      <nav class="l-nav-links" id="landingNavLinks" aria-label="Primary">
+        <a href="#find">Find Hostels</a>
+        <a href="#how">How It Works</a>
+        <a href="#why">Why HostelHub</a>
+        <a href="#owners">For Owners</a>
+      </nav>
+
+      <div class="l-nav-actions">
+        <button class="btn btn-ghost" data-action="go-landing-login">Log In</button>
+        <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
+      </div>
+
+      <button class="l-nav-toggle" id="mobileNavToggle" data-action="toggle-mobile-nav" aria-label="Open menu" aria-expanded="false" aria-controls="landingNavLinks">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <a id="top"></a>
+
+  <!-- ---------- Hero ---------- -->
+  <section class="l-hero">
+    <div class="l-hero-bg" aria-hidden="true"></div>
+    <div class="l-hero-inner">
+
+      <div class="l-hero-copy reveal">
+        <span class="landing-eyebrow">Built for college students</span>
+        <h1 class="l-hero-title">Find a place<br>you'll feel at home.</h1>
+        <p class="l-hero-subtitle">Discover verified hostels and PGs near your college. Compare rent, facilities and distance — then connect directly with property owners.</p>
+
+        <div class="landing-cta-row">
+          <button class="btn btn-gold btn-lg" data-action="browse-guest">Browse Hostels →</button>
+          <button class="btn btn-outline btn-lg" data-action="go-landing-signup">Create Free Account</button>
+        </div>
+
+        <p class="l-trust-line">
+          <span>No middlemen</span><span class="l-dot">•</span><span>Verified listings</span><span class="l-dot">•</span><span>Direct owner contact</span>
+        </p>
+      </div>
+
+      <div class="l-hero-visual reveal" aria-hidden="true">
+        <div class="l-hero-card">
+          <div class="l-hero-card-media">
+            <span class="l-hero-card-badge">✓ Verified</span>
+          </div>
+          <div class="l-hero-card-body">
+            <div class="l-hero-card-top">
+              <h3>Elite Girls Residency</h3>
+              <span class="l-hero-card-rating">★ 4.8</span>
+            </div>
+            <p class="l-hero-card-loc">0.8 km from college · Engineering Block</p>
+            <div class="l-hero-card-amenities">
+              <span>WiFi</span><span>AC</span><span>Food</span><span>Security</span>
+            </div>
+            <div class="l-hero-card-foot">
+              <strong>₹8,500<span>/month</span></strong>
+              <span class="btn btn-sm btn-gold">View</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="l-float-chip l-float-chip-1">✓ Verified Property</div>
+        <div class="l-float-chip l-float-chip-2">₹8,500 / month</div>
+        <div class="l-float-chip l-float-chip-3">0.8 km from college</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ---------- Trust / stats ---------- -->
+  <section class="l-stats-section reveal">
+    <p class="l-stats-kicker">Trusted by students across campus</p>
+    <div class="landing-stats" id="landingStats"></div>
+  </section>
+
+  <!-- ---------- Why HostelHub ---------- -->
+  <section class="l-section" id="why">
+    <div class="l-section-head reveal">
+      <h2>Why HostelHub?</h2>
+      <p>Everything you need to find a place you can actually trust.</p>
+    </div>
+    <div class="l-feature-grid">
+      <div class="l-feature-card reveal">
+        <div class="l-feature-icon">✓</div>
+        <h3>Verified Listings</h3>
+        <p>Find properties that have been reviewed and approved before they ever reach you.</p>
+      </div>
+      <div class="l-feature-card reveal">
+        <div class="l-feature-icon">⇄</div>
+        <h3>Compare Before You Decide</h3>
+        <p>Compare rent, distance, rooms and facilities side-by-side in one place.</p>
+      </div>
+      <div class="l-feature-card reveal">
+        <div class="l-feature-icon">✉</div>
+        <h3>Direct Owner Contact</h3>
+        <p>Connect directly with property owners — no unnecessary middlemen or agents.</p>
+      </div>
+      <div class="l-feature-card reveal">
+        <div class="l-feature-icon">🎓</div>
+        <h3>Made for Students</h3>
+        <p>Search based on the things students actually care about — distance, budget, roommates.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- How it works ---------- -->
+  <section class="l-section l-section-alt" id="how">
+    <div class="l-section-head reveal">
+      <h2>How It Works</h2>
+      <p>From search to move-in, in three simple steps.</p>
+    </div>
+    <div class="l-steps">
+      <div class="l-step reveal">
+        <span class="l-step-num">01</span>
+        <h3>Search</h3>
+        <p>Find hostels and PGs near your college in seconds.</p>
+      </div>
+      <div class="l-step-line" aria-hidden="true"></div>
+      <div class="l-step reveal">
+        <span class="l-step-num">02</span>
+        <h3>Compare</h3>
+        <p>Compare rent, distance and amenities side-by-side.</p>
+      </div>
+      <div class="l-step-line" aria-hidden="true"></div>
+      <div class="l-step reveal">
+        <span class="l-step-num">03</span>
+        <h3>Connect</h3>
+        <p>Contact the owner directly and lock in your room.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- Product preview (real data) ---------- -->
+  <section class="l-section" id="find">
+    <div class="l-section-head reveal">
+      <h2>See what's waiting for you</h2>
+      <p>A few verified listings, pulled straight from HostelHub.</p>
+    </div>
+    <div class="l-preview-grid" id="landingPreview"></div>
+    <div class="l-preview-cta reveal">
+      <button class="btn btn-outline btn-lg" data-action="browse-guest">Browse All Hostels →</button>
+    </div>
+  </section>
+
+  <!-- ---------- Student / Owner split ---------- -->
+  <section class="l-split" id="owners">
+    <div class="l-split-card reveal">
+      <h3>Your next room is closer than you think.</h3>
+      <p>Thousands of students have already found their place through HostelHub.</p>
+      <button class="btn btn-gold btn-lg" data-action="browse-guest">Find a Hostel →</button>
+    </div>
+    <div class="l-split-card l-split-card-dark reveal">
+      <h3>Have a property? Put it in front of students.</h3>
+      <p>List your hostel or PG and start receiving inquiries directly.</p>
+      <button class="btn btn-outline btn-lg" data-action="go-owner-portal">List Your Property →</button>
+    </div>
+  </section>
+
+  <!-- ---------- Final CTA ---------- -->
+  <section class="l-final-cta reveal">
+    <h2>Ready to find your next home?</h2>
+    <p>Search verified hostels, compare your options and connect directly with owners.</p>
+    <div class="landing-cta-row">
+      <button class="btn btn-gold btn-lg" data-action="browse-guest">Browse Hostels</button>
+      <button class="btn btn-outline btn-lg" data-action="go-landing-signup">Create Free Account</button>
+    </div>
+  </section>
+
+  <!-- ---------- Footer ---------- -->
+  <footer class="l-footer">
+    <div class="l-footer-top">
+      <div class="l-footer-brand">
+        <span class="l-logo"><span class="l-logo-mark" aria-hidden="true">🏠</span>HostelHub</span>
+        <p>Making student accommodation search simpler.</p>
+      </div>
+
+      <div class="l-footer-col">
+        <h4>Product</h4>
+        <a href="#find">Find Hostels</a>
+        <a href="#find">Compare</a>
+        <a href="#how">How It Works</a>
+      </div>
+
+      <div class="l-footer-col">
+        <h4>For Owners</h4>
+        <a href="#" data-action="go-owner-portal">List Property</a>
+        <a href="#" data-action="go-owner-portal">Owner Portal</a>
+      </div>
+
+      <div class="l-footer-col">
+        <h4>Company</h4>
+        <span>About</span>
+        <span>Contact</span>
+        <span>Help</span>
+      </div>
+
+      <div class="l-footer-col">
+        <h4>Legal</h4>
+        <span>Privacy</span>
+        <span>Terms</span>
+      </div>
+    </div>
+    <div class="l-footer-bottom">
+      <span>© 2026 HostelHub. All rights reserved.</span>
+    </div>
+  </footer>
+</div>
+
+<!-- =================== AUTH SCREEN (student / owner — portal-aware; admin signs in through either with its own credentials) =================== -->
+<div id="authScreen" class="auth-screen" hidden>
+  <div class="auth-orb orb-1"></div>
+  <div class="auth-orb orb-2"></div>
+  <div id="authCardContainer"></div>
+</div>
+
+<!-- =================== MAIN APP =================== -->
+<div id="mainApp" class="main-app" hidden>
+  <header class="navbar">
+    <div class="nav-left">
+      <span class="nav-logo" id="navLogo">🏠 HostelHub</span>
+      <span class="nav-role-tag" id="navRoleTag">Student</span>
+    </div>
+    <nav class="nav-tabs" id="navTabs"></nav>
+    <div class="nav-right" id="navRight"></div>
+  </header>
+
+  <main id="viewRoot" class="view-root"></main>
+</div>
+
+<!-- =================== MODAL =================== -->
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal" id="modalBody"></div>
+</div>
+
+<!-- hidden file input reused by the listing form -->
+<input type="file" id="listingImageFile" accept="image/*" hidden />
+
+<script src="script.js"></script>
+</body>
+</html>
