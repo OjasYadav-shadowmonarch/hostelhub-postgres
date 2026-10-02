@@ -135,21 +135,18 @@ const PORTAL_COPY = {
     wordmark: "🏠 HostelHub", icon: "🔑",
     loginTitle: "Welcome Back", loginSubtitle: "Sign in to your account",
     signupTitle: "Create Account", signupSubtitle: "Join HostelHub today",
-    demo: [["rahul", "Student", "demo123"], ["admin", "Admin", "hostelhub123"]],
     signupAllowed: true
   },
   owner: {
     wordmark: "🏠 HostelHub Owners", icon: "🏡",
     loginTitle: "Owner Portal", loginSubtitle: "Sign in to manage your properties",
     signupTitle: "List Your First Property", signupSubtitle: "Create a free owner account",
-    demo: [["priya", "Owner", "demo123"], ["admin", "Admin", "hostelhub123"]],
     signupAllowed: true
   },
   admin: {
     wordmark: "🏠 HostelHub Admin", icon: "🛡️",
     loginTitle: "Admin Portal", loginSubtitle: "Sign in to the control panel",
     signupTitle: "", signupSubtitle: "",
-    demo: [["admin", "Admin", "hostelhub123"]],
     signupAllowed: false
   }
 };
@@ -300,7 +297,6 @@ function renderAuthCard() {
   const isSignup = state.authMode === "signup";
   const backLink = `<div class="auth-back-link"><a href="#" data-action="back-to-landing">← Back to HostelHub</a></div>`;
 
-  const demoHint = `<div class="demo-hint"><strong>Demo accounts</strong><br>${copy.demo.map(([u, r, p]) => `<code>${u}</code> / <code>${p}</code> · ${r}`).join("<br>")}</div>`;
 
   let cardHTML;
   if (isSignup) {
@@ -340,7 +336,6 @@ function renderAuthCard() {
         <p class="form-error" id="authError" hidden></p>
         <button class="btn btn-gold btn-block" data-action="login">Sign In →</button>
         ${copy.signupAllowed ? `<p class="switch-line">Don't have an account? <a href="#" data-action="switch-auth-mode" data-id="signup">Create one</a></p>` : `<div class="auth-portal-note">Admin accounts are provisioned by HostelHub — contact support for access.</div>`}
-        ${demoHint}
       </div>`;
   }
 
