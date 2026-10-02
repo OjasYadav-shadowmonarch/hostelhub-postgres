@@ -17,7 +17,7 @@ file next to this script (see .env.example):
 Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
-
+# GitHub 1st deployment test - 2026-10-03
 import os
 import re
 from datetime import date, datetime
