@@ -314,8 +314,6 @@ def init_db():
     db = PGConn(conn)
     try:
         create_schema(db)
-        if db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0:
-            insert_demo_data(db)
         db.commit()
     finally:
         db.close()
