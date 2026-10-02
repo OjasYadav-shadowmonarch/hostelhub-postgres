@@ -1,117 +1,80 @@
-# HostelHub — PostgreSQL edition
+# 🏠 HostelHub
 
-The same app as the SQLite build — same routes, same JSON, same
-`index.html` / `style.css` / `script.js` — with storage moved to
-PostgreSQL and all configuration read from a `.env` file.
+HostelHub is a web-based hostel and accommodation discovery platform designed primarily for college students.
 
-## Files
+It allows students to explore available hostels, compare accommodation options, view details, and contact property owners. Property owners can list and manage hostels, while administrators can manage listings and users.
 
-| File | Purpose |
-|------|---------|
-| `app.py` | Flask backend + static front-end server |
-| `database.sql` | **The database file** — schema + demo data, import it into Postgres |
-| `schema.sql` | Schema only (tables/indexes, no demo accounts) — use for production |
-| `.env.example` | Template for your `.env` (DB connection, secret key, dev options) |
-| `requirements.txt` | `Flask`, `psycopg2-binary`, `python-dotenv` |
+The application is built with Flask and PostgreSQL and is deployed using Render.
 
-## 1. Create the database and attach the SQL file
+---
 
-```bash
-createdb -U postgres roomfinder
-psql -U postgres -d roomfinder -v ON_ERROR_STOP=1 -f database.sql
-```
+## 🚀 Live Application
 
-pgAdmin / DBeaver: create an empty `roomfinder` database, open
-`database.sql` in the Query Tool and run it.
+**Live Website:**  
+https://hostelhub-postgres.onrender.com/
 
-`database.sql` is safe to re-run (it never overwrites existing rows). For a
-clean slate, uncomment the three `DROP TABLE` lines at its top first.
+> Replace the URL above with your actual Render URL.
 
-No Postgres installed? A throwaway one in Docker:
+---
 
-```bash
-docker run --name hostelhub-db -e POSTGRES_PASSWORD=change-me \
-  -e POSTGRES_DB=roomfinder -p 5432:5432 -d postgres:16
-```
+## 📌 Project Overview
 
-## 2. Configure `.env`
+Finding suitable student accommodation can be difficult because information about hostels is often scattered across different sources.
 
-```bash
-cp .env.example .env      # Windows: copy .env.example .env
-```
+HostelHub provides a centralized platform where:
 
-Edit `.env`: set `PGPASSWORD` (or use `DATABASE_URL` instead) and a real
-`SECRET_KEY`. Real environment variables, if set, override the file.
+- Students can discover hostels.
+- Students can compare accommodation options.
+- Students can create and manage their accounts.
+- Owners can list their properties.
+- Owners can manage their hostel listings.
+- Students can send inquiries to hostel owners.
+- Administrators can manage users and hostel listings.
 
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `DATABASE_URL` | — | Full connection URL; wins over the `PG*` values |
-| `PGHOST` / `PGPORT` / `PGDATABASE` / `PGUSER` | `localhost` / `5432` / `roomfinder` / `postgres` | Individual settings |
-| `PGPASSWORD` | — | Database password |
-| `SECRET_KEY` | insecure dev value | Session-cookie signing key |
-| `FLASK_DEBUG` | `0` | `1` enables auto-reload/debugger (dev only) |
-| `HOST` / `PORT` | `127.0.0.1` / `5000` | Dev-server bind address |
+---
 
-## 3. Install and run
+## ✨ Features
 
-```bash
-pip install -r requirements.txt
-python app.py
-```
+### 👨‍🎓 Student Portal
 
-Open **http://127.0.0.1:5000**. On start the app creates any missing
-tables and loads the demo data only if the `users` table is empty, so you
-can skip step 1's import and let the app set itself up — or import
-`database.sql` first; both give the same result.
+- Student registration and login
+- Browse available hostels
+- Search and filter hostel listings
+- View hostel details
+- View rent, location, distance and amenities
+- View hostel ratings
+- Contact/inquire about a hostel
+- Manage personal profile
+- Change password
+- Logout
 
-Under gunicorn/waitress (`gunicorn app:app`) the app does **not** create
-tables for you — apply `database.sql` or `schema.sql` beforehand.
+### 🏠 Owner Portal
 
-## Demo accounts
+- Owner registration and login
+- Add hostel/property listings
+- Manage listed properties
+- Update property availability
+- View property status
+- View inquiries from students
+- Manage property information
 
-All seeded student/owner accounts use **`demo123`**. The admin signs in from
-either the student or owner login screen.
+### 🛡️ Admin Portal
 
-| Username | Password       | Role    |
-|----------|----------------|---------|
-| `rahul`  | `demo123`      | student |
-| `priya`  | `demo123`      | owner   |
-| `admin`  | `hostelhub123` | admin   |
+- Admin authentication
+- View registered users
+- Manage hostel listings
+- Approve hostel listings
+- Reject hostel listings
+- Toggle hostel availability
+- View platform data
+- Manage application-level information
 
-## What changed from the SQLite version
+---
 
-- `sqlite3` → `psycopg2`; `?` placeholders → `%s`
-- `INTEGER PRIMARY KEY AUTOINCREMENT` → `SERIAL`; `lastrowid` → `INSERT ... RETURNING id`
-- `live` is a real `BOOLEAN`; `joined` / `date` are real `DATE` columns (the API still returns `YYYY-MM-DD` strings)
-- Case-insensitive unique index on usernames, so simultaneous signups can't create duplicates
-- Connection settings, secret key and debug mode come from `.env` instead of being hard-coded
-- Static serving is now an allowlist (html/css/js/images/fonts only), so `.env`, `app.py` and the `.sql` files can never be downloaded from the web server
-- Admin "Reset" rebuilds the tables with demo data, as before
+## 🗄️ Database
 
-## API overview
+HostelHub uses PostgreSQL as its relational database.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/meta` | Colleges + amenity list |
-| GET | `/api/state` | All users/hostels/inquiries |
-| GET | `/api/auth/me` | Current logged-in user |
-| POST | `/api/auth/login` | Log in (admin bypasses the portal check) |
-| POST | `/api/auth/signup` | Create account |
-| POST | `/api/auth/logout` | Log out |
-| PUT | `/api/auth/profile` | Update name / email / phone |
-| PUT | `/api/auth/password` | Change password |
-| POST | `/api/hostels` | Owner: create listing |
-| PUT / DELETE | `/api/hostels/<id>` | Owner/admin: edit / delete listing |
-| POST | `/api/hostels/<id>/toggle-availability` | Owner: show/hide listing |
-| POST | `/api/hostels/<id>/approve` · `/reject` | Admin: approve / reject listing |
-| POST | `/api/hostels/<id>/contact` | Student: send inquiry |
-| PUT | `/api/inquiries/<id>/respond` | Owner: mark responded |
-| PUT | `/api/users/<id>/toggle-status` | Admin: activate/deactivate user |
-| GET | `/api/export` | Admin: export all data as JSON |
-| POST | `/api/reset` | Admin: reset to demo data |
+### Main tables
 
-## Before deploying
-
-- Set a strong `SECRET_KEY` and `FLASK_DEBUG=0`.
-- Load `schema.sql` (not `database.sql`) so the known demo passwords don't exist in production.
-- Run behind gunicorn/waitress and HTTPS rather than `python app.py`.
+```text
