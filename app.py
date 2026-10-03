@@ -302,53 +302,63 @@ def seed(db):
     insert_demo_data(db)
     db.commit()
 
-
 def init_db():
-    """Make sure the tables exist (non-destructive) and, if the users table
-    is empty, load the demo data. Safe to run on every start."""
+    """Create the schema and provision the configured administrator."""
     try:
         conn = connect()
     except psycopg2.OperationalError as exc:
         raise SystemExit(
-            "Could not connect to PostgreSQL. Check DATABASE_URL (or PGHOST / PGPORT / "
-            "PGDATABASE / PGUSER / PGPASSWORD) in your .env file, and that the server is "
-            "running and the database exists.\n\n" + str(exc)
+            "Could not connect to PostgreSQL. Check DATABASE_URL (or "
+            "PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD) "
+            "in your environment, and confirm the database exists.\n\n"
+            + str(exc)
         )
+
     db = PGConn(conn)
+
     try:
         create_schema(db)
-      if ADMIN_USERNAME and ADMIN_PASSWORD:
-    existing_admin = db.execute(
-        "SELECT id FROM users WHERE lower(username)=lower(%s)",
-        (ADMIN_USERNAME,),
-    ).fetchone()
 
-    if existing_admin:
-        db.execute(
-            "UPDATE users SET role='admin', password_hash=%s, status='active' "
-            "WHERE id=%s",
-            (
-                generate_password_hash(ADMIN_PASSWORD),
-                existing_admin["id"],
-            ),
-        )
-    else:
-        db.execute(
-            """
-            INSERT INTO users
-                (name, username, email, phone, role, joined, status, password_hash)
-            VALUES (%s, %s, %s, %s, 'admin', %s, 'active', %s)
-            """,
-            (
-                "HostelHub Administrator",
-                ADMIN_USERNAME,
-                None,
-                None,
-                date.today().isoformat(),
-                generate_password_hash(ADMIN_PASSWORD),
-            ),
-        )
+        if ADMIN_USERNAME and ADMIN_PASSWORD:
+            existing_admin = db.execute(
+                "SELECT id FROM users WHERE lower(username)=lower(%s)",
+                (ADMIN_USERNAME,),
+            ).fetchone()
+
+            if existing_admin:
+                db.execute(
+                    "UPDATE users "
+                    "SET role='admin', password_hash=%s, status='active' "
+                    "WHERE id=%s",
+                    (
+                        generate_password_hash(ADMIN_PASSWORD),
+                        existing_admin["id"],
+                    ),
+                )
+            else:
+                db.execute(
+                    """
+                    INSERT INTO users
+                        (name, username, email, phone, role,
+                         joined, status, password_hash)
+                    VALUES (%s, %s, %s, %s, 'admin', %s, 'active', %s)
+                    """,
+                    (
+                        "HostelHub Administrator",
+                        ADMIN_USERNAME,
+                        None,
+                        None,
+                        date.today().isoformat(),
+                        generate_password_hash(ADMIN_PASSWORD),
+                    ),
+                )
+
         db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
     finally:
         db.close()
 
