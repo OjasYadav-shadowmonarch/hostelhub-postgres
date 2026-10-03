@@ -884,20 +884,40 @@ def api_export():
     return jsonify(payload)
 
 
+
 @app.post("/api/reset")
 def api_reset():
     user, err = require_role("admin")
     if err:
         return err
-    username = user["username"]
+
+    if (
+        not ADMIN_USERNAME
+        or user["username"].lower() != ADMIN_USERNAME.lower()
+    ):
+        return error(
+            "Only the configured administrator can clear platform data.",
+            403,
+        )
+
     db = get_db()
-    seed(db)
-    row = db.execute("SELECT * FROM users WHERE lower(username)=lower(%s)", (username,)).fetchone()
-    if row:
-        session["user_id"] = row["id"]
-    else:
-        session.clear()
-    return jsonify({"ok": True, "loggedOut": row is None})
+
+    try:
+        # Delete related records before deleting their parent records.
+        db.execute("DELETE FROM inquiries")
+        db.execute("DELETE FROM hostels")
+        db.execute(
+            "DELETE FROM users WHERE id <> %s",
+            (user["id"],),
+        )
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    return jsonify({"ok": True, "loggedOut": False})
+
 
 
 # ---------------------------------------------------------------- #
