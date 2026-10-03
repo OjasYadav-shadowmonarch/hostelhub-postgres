@@ -36,8 +36,11 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 DEMO_PASSWORD = "demo123"        # password for every seeded student/owner demo account
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "hostelhub123"  # the one fixed admin credential -- see api_login()
+DEMO_PASSWORD = "demo123"
+
+# Set these securely in Render Environment Variables.
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "").strip()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PHONE_RE = re.compile(r"^\d{10}$")
@@ -314,6 +317,37 @@ def init_db():
     db = PGConn(conn)
     try:
         create_schema(db)
+      if ADMIN_USERNAME and ADMIN_PASSWORD:
+    existing_admin = db.execute(
+        "SELECT id FROM users WHERE lower(username)=lower(%s)",
+        (ADMIN_USERNAME,),
+    ).fetchone()
+
+    if existing_admin:
+        db.execute(
+            "UPDATE users SET role='admin', password_hash=%s, status='active' "
+            "WHERE id=%s",
+            (
+                generate_password_hash(ADMIN_PASSWORD),
+                existing_admin["id"],
+            ),
+        )
+    else:
+        db.execute(
+            """
+            INSERT INTO users
+                (name, username, email, phone, role, joined, status, password_hash)
+            VALUES (%s, %s, %s, %s, 'admin', %s, 'active', %s)
+            """,
+            (
+                "HostelHub Administrator",
+                ADMIN_USERNAME,
+                None,
+                None,
+                date.today().isoformat(),
+                generate_password_hash(ADMIN_PASSWORD),
+            ),
+        )
         db.commit()
     finally:
         db.close()
@@ -438,6 +472,7 @@ def api_me():
 # ---------------------------------------------------------------- #
 
 @app.post("/api/auth/login")
+
 def api_login():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
@@ -448,20 +483,40 @@ def api_login():
         return error("Please enter both username and password.")
 
     db = get_db()
-    row = db.execute("SELECT * FROM users WHERE lower(username)=lower(%s)", (username,)).fetchone()
+    row = db.execute(
+        "SELECT * FROM users WHERE lower(username)=lower(%s)",
+        (username,)
+    ).fetchone()
+
     if not row:
         return error("No account found with that username.")
+
     if not check_password_hash(row["password_hash"], password):
         return error("Incorrect password.")
-    # The admin account signs in through *any* portal screen with its own
-    # fixed credentials — it's exempt from the portal/role match check below.
-    if portal and row["role"] != portal and row["role"] != "admin":
-        return error(f"This account is registered as {row['role']}, not {portal}.", 409)
+
     if row["status"] == "inactive":
         return error("This account has been deactivated. Contact an administrator.")
 
+    # Only the administrator configured in the server environment
+    # may bypass the portal-role match check.
+    is_configured_admin = (
+        bool(ADMIN_USERNAME)
+        and row["role"] == "admin"
+        and row["username"].lower() == ADMIN_USERNAME.lower()
+    )
+
+    if row["role"] == "admin" and not is_configured_admin:
+        return error("This administrator account is not authorized.", 403)
+
+    if portal and not is_configured_admin and row["role"] != portal:
+        return error(
+            f"This account is registered as {row['role']}, not {portal}.",
+            409
+        )
+
     session["user_id"] = row["id"]
     return jsonify({"user": user_public(row)})
+
 
 
 @app.post("/api/auth/signup")
@@ -473,7 +528,8 @@ def api_signup():
     phone = (data.get("phone") or "").strip()
     password = data.get("password") or ""
     confirm = data.get("confirm") or ""
-    role = data.get("role") or "student"
+    requested_role = data.get("role") or "student"
+role = requested_role if requested_role in ("student", "owner") else "invalid"
 
     if not name or not username or not email or not phone or not password or not confirm:
         return error("Please fill in all required fields.")
@@ -485,8 +541,11 @@ def api_signup():
         return error("Password must be at least 6 characters.")
     if password != confirm:
         return error("Passwords do not match.")
-    if role not in ("student", "owner", "admin"):
-        return error("Invalid role.")
+    if role not in ("student", "owner"):
+    return error(
+        "Only student and owner accounts can be registered. "
+        "Admin accounts are provisioned privately."
+    )
 
     db = get_db()
     existing = db.execute("SELECT id FROM users WHERE lower(username)=lower(%s)", (username,)).fetchone()
