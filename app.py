@@ -532,50 +532,83 @@ def api_login():
 @app.post("/api/auth/signup")
 def api_signup():
     data = request.get_json(silent=True) or {}
+
     name = (data.get("name") or "").strip()
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip()
     phone = (data.get("phone") or "").strip()
     password = data.get("password") or ""
     confirm = data.get("confirm") or ""
+
     requested_role = data.get("role") or "student"
-role = requested_role if requested_role in ("student", "owner") else "invalid"
+    role = (
+        requested_role
+        if requested_role in ("student", "owner")
+        else "invalid"
+    )
 
     if not name or not username or not email or not phone or not password or not confirm:
         return error("Please fill in all required fields.")
+
     if not EMAIL_RE.match(email):
         return error("Please enter a valid email address (e.g. name@example.com).")
+
     if not PHONE_RE.match(phone):
-        return error("Phone number must be exactly 10 digits, with no letters or symbols.")
+        return error(
+            "Phone number must be exactly 10 digits, "
+            "with no letters or symbols."
+        )
+
     if len(password) < 6:
         return error("Password must be at least 6 characters.")
+
     if password != confirm:
         return error("Passwords do not match.")
+
     if role not in ("student", "owner"):
-    return error(
-        "Only student and owner accounts can be registered. "
-        "Admin accounts are provisioned privately."
-    )
+        return error(
+            "Only student and owner accounts can be registered. "
+            "Admin accounts are provisioned privately."
+        )
 
     db = get_db()
-    existing = db.execute("SELECT id FROM users WHERE lower(username)=lower(%s)", (username,)).fetchone()
+
+    existing = db.execute(
+        "SELECT id FROM users WHERE lower(username)=lower(%s)",
+        (username,),
+    ).fetchone()
+
     if existing:
         return error("That username is already taken.")
 
     try:
         cur = db.execute(
-            "INSERT INTO users (name, username, email, phone, role, joined, status, password_hash) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (name, username, email, phone,
-             role, date.today().isoformat(), "active", generate_password_hash(password)),
+            "INSERT INTO users "
+            "(name, username, email, phone, role, joined, status, password_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (
+                name,
+                username,
+                email,
+                phone,
+                role,
+                date.today().isoformat(),
+                "active",
+                generate_password_hash(password),
+            ),
         )
     except pg_errors.UniqueViolation:
-        # two signups raced past the check above; the unique index caught it
         db.rollback()
         return error("That username is already taken.")
+
     new_id = cur.fetchone()["id"]
     db.commit()
-    row = db.execute("SELECT * FROM users WHERE id=%s", (new_id,)).fetchone()
+
+    row = db.execute(
+        "SELECT * FROM users WHERE id=%s",
+        (new_id,),
+    ).fetchone()
+
     session["user_id"] = row["id"]
     return jsonify({"user": user_public(row)}), 201
 
