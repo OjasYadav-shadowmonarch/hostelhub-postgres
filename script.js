@@ -1642,17 +1642,30 @@ async function exportData() {
   URL.revokeObjectURL(url);
   showToast("Platform data exported.", "success");
 }
+
 async function resetData() {
-  if (!confirm("Reset all platform data back to the demo defaults?")) return;
+  const confirmed = confirm(
+    "CLEAR ALL PLATFORM DATA?\n\n" +
+    "This permanently deletes all hostel listings, inquiries, " +
+    "and all non-admin user accounts.\n\n" +
+    "Your configured administrator account will be preserved.\n\n" +
+    "This action cannot be undone. Continue?"
+  );
+
+  if (!confirmed) return;
+
   let data;
+
   try {
     data = await api("/reset", { method: "POST" });
   } catch (err) {
     showToast(err.message, "error");
     return;
   }
+
   await refreshState();
-  showToast("Platform data reset.", "success");
+  showToast("Platform data cleared successfully.", "success");
+
   if (data.loggedOut) {
     state.currentUser = null;
     showLandingScreen();
