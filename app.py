@@ -800,11 +800,13 @@ def api_reset():
 
 # ---------------------------------------------------------------- #
 
+# Initialize the non-destructive schema when imported by Gunicorn.
+init_db()
+
 if __name__ == "__main__":
     if not os.environ.get("SECRET_KEY"):
         print("WARNING: SECRET_KEY is not set -- using the insecure development default. "
               "Set it in .env before deploying.")
-    init_db()
     app.run(
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "5000")),
