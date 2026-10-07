@@ -431,6 +431,10 @@ def require_role(*roles):
 # Static front-end (index.html / style.css / script.js)
 # ---------------------------------------------------------------- #
 
+@app.route("/health")
+def health():
+    return "OK", 200
+  
 @app.route("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
