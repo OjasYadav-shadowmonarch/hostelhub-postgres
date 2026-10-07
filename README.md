@@ -11,11 +11,7 @@ The application is built with Flask and PostgreSQL and is deployed using Render.
 ## 🚀 Live Application
 
 **Live Website:**  
-`https://YOUR-RENDER-URL.onrender.com`
-
-> Replace the URL above with your actual Render URL.
-
----
+https://hostelhub-postgres.onrender.com/
 
 ## 📌 Project Overview
 
