@@ -1274,9 +1274,41 @@ function openListingModal(id) {
         <input type="number" id="listingDistance" min="0" step="0.1" value="${editing ? editing.distance : "0.5"}" />
       </div>
       <div class="field-group">
-        <label>Location / Area *</label>
-        <input type="text" id="listingLocation" placeholder="e.g. North Campus, DU" value="${editing ? esc(editing.location) : ""}" />
-      </div>
+  <label>Location / Area *</label>
+  <input
+    type="text"
+    id="listingLocation"
+    placeholder="e.g. North Campus, DU"
+    value="${editing ? esc(editing.location) : ""}"
+  />
+</div>
+
+<div class="field-group listing-map-group">
+  <label>Property Location on Map</label>
+
+  <div class="map-search-row">
+    <input
+      type="text"
+      id="listingMapSearch"
+      placeholder="Search your property location..."
+      value="${editing ? esc(editing.location) : ""}"/>
+    <button
+      type="button"
+      class="btn"
+      data-action="search-listing-location">
+      Search Location
+    </button>
+  </div>
+
+  <div id="listingMap" class="listing-map"></div>
+
+  <div id="listingMapStatus" class="map-status">
+    Search for your property and adjust the marker if needed.
+  </div>
+
+  <input type="hidden" id="listingLatitude" value="${editing && editing.latitude != null ? editing.latitude : ""}" />
+  <input type="hidden" id="listingLongitude" value="${editing && editing.longitude != null ? editing.longitude : ""}" />
+</div>
       <div class="field-group">
         <label>Monthly Rent (₹) *</label>
         <input type="number" id="listingRent" min="0" placeholder="8000" value="${editing ? editing.rent : ""}" />
@@ -1304,6 +1336,8 @@ function openListingModal(id) {
       <button class="btn btn-gold" data-action="submit-listing">${editing ? "Save Changes" : "Submit Listing"}</button>
     </div>
   `);
+   
+   initializeListingMap(editing);
 }
 
 function handleImageUpload(file) {
