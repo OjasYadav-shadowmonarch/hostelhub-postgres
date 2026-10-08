@@ -1231,7 +1231,56 @@ async function markInquiryResponded(id) {
 }
 
 /* ---------------------- Add / edit listing modal ---------------------- */
+function initializeListingMap(editing) {
+  const mapElement = $("#listingMap");
+  if (!mapElement || typeof maplibregl === "undefined") return;
 
+  const latitude = editing && editing.latitude != null
+    ? Number(editing.latitude)
+    : 20.5937;
+
+  const longitude = editing && editing.longitude != null
+    ? Number(editing.longitude)
+    : 78.9629;
+
+  const map = new maplibregl.Map({
+    container: "listingMap",
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [longitude, latitude],
+    zoom: editing && editing.latitude != null ? 15 : 5
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  const marker = new maplibregl.Marker({
+    draggable: true
+  })
+    .setLngLat([longitude, latitude])
+    .addTo(map);
+
+  const updateCoordinates = () => {
+    const position = marker.getLngLat();
+
+    $("#listingLatitude").value = position.lat;
+    $("#listingLongitude").value = position.lng;
+
+    $("#listingMapStatus").textContent =
+      `Selected location: ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
+  };
+
+  marker.on("dragend", updateCoordinates);
+
+  map.on("load", () => {
+    map.resize();
+
+    if (editing && editing.latitude != null && editing.longitude != null) {
+      updateCoordinates();
+    }
+  });
+
+  window.hostelHubListingMap = map;
+  window.hostelHubListingMarker = marker;
+}
 function openListingModal(id) {
   const editing = id ? findHostel(id) : null;
   state.editingHostelId = editing ? editing.id : null;
