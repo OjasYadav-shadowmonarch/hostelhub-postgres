@@ -1281,6 +1281,7 @@ function initializeListingMap(editing) {
   window.hostelHubListingMap = map;
   window.hostelHubListingMarker = marker;
 }
+
 function openListingModal(id) {
   const editing = id ? findHostel(id) : null;
   state.editingHostelId = editing ? editing.id : null;
@@ -1406,6 +1407,8 @@ async function submitListingForm() {
   const college = $("#listingCollege").value;
   const distance = parseFloat($("#listingDistance").value) || 0.5;
   const location = $("#listingLocation").value.trim();
+  const latitude = $("#listingLatitude").value;
+  const longitude = $("#listingLongitude").value;
   const rent = parseInt($("#listingRent").value, 10);
   const rooms = parseInt($("#listingRooms").value, 10) || 1;
   const description = $("#listingDescription").value.trim();
@@ -1418,7 +1421,20 @@ async function submitListingForm() {
   }
 
   const image = state.listingImageData || urlField || null;
-  const payload = { name, type, college, distance, location, rent, rooms, description, amenities, image };
+  const payload = {
+  name,
+  type,
+  college,
+  distance,
+  location,
+  rent,
+  rooms,
+  description,
+  amenities,
+  image,
+  latitude,
+  longitude
+};
 
   try {
     if (state.editingHostelId) {
@@ -1867,7 +1883,7 @@ const ACTIONS = {
   "save-profile": () => saveProfile(),
   "save-password": () => savePassword(),
   "upload-image-trigger": () => document.getElementById("listingImageFile").click(),
-   "search-listing-location": () => searchListingLocation()
+  "search-listing-location": () => searchListingLocation()
 };
 
 document.addEventListener("click", (e) => {
