@@ -468,7 +468,6 @@ def static_files(filename):
 # Meta / bootstrap
 # ---------------------------------------------------------------- #
 
-@app.get("/api/meta")
 @app.post("/api/geocode")
 def api_geocode():
     user, err = require_role("owner")
@@ -528,9 +527,9 @@ def api_geocode():
             "display_name": result.get("display_name", address),
         }
     )
+@app.get("/api/meta")
 def api_meta():
     return jsonify({"colleges": COLLEGES, "amenities": AMENITY_DEFS})
-
 
 @app.get("/api/state")
 def api_state():
