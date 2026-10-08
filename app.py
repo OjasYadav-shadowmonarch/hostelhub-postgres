@@ -652,25 +652,21 @@ def api_signup():
 
     try:
         cur = db.execute(
-    "INSERT INTO hostels (name, type, owner_id, college, location, latitude, longitude, "
-    "distance, rent, rooms, rating, status, live, views, amenities, description, image) "
-    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) RETURNING id",
-    (
-        name,
-        data.get("type", "Boys Hostel"),
-        user["id"],
-        data.get("college", COLLEGES[0]),
-        location,
-        data.get("latitude"),
-        data.get("longitude"),
-        float(data.get("distance") or 0.5),
-        int(rent),
-        int(data.get("rooms") or 1),
-        ",".join(data.get("amenities") or []),
-        (data.get("description") or "").strip(),
-        data.get("image"),
-    ),
-)
+            "INSERT INTO users "
+            "(name, username, email, phone, role, joined, status, password_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+            "RETURNING id",
+            (
+                name,
+                username,
+                email,
+                phone,
+                role,
+                date.today().isoformat(),
+                "active",
+                generate_password_hash(password),
+            ),
+        )
     except pg_errors.UniqueViolation:
         db.rollback()
         return error("That username is already taken.")
@@ -684,10 +680,8 @@ def api_signup():
     ).fetchone()
 
     session["user_id"] = row["id"]
-    return jsonify({"user": user_public(row)}), 201
 
-
-@app.post("/api/auth/logout")
+    return jsonify({"user": user_public(row)}), 201@app.post("/api/auth/logout")
 def api_logout():
     session.clear()
     return jsonify({"ok": True})
