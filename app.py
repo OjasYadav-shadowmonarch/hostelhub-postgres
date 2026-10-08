@@ -752,40 +752,48 @@ def api_create_hostel():
     user, err = require_role("owner")
     if err:
         return err
+
     data = request.get_json(silent=True) or {}
+
     name = (data.get("name") or "").strip()
     location = (data.get("location") or "").strip()
     rent = data.get("rent")
+
     if not name or not location or not rent:
         return error("Please fill in property name, location and rent.")
 
     db = get_db()
+
     cur = db.execute(
-        "INSERT INTO hostels (name, type, owner_id, college, location, distance, rent, rooms, rating, "
-        "status, live, views,"
+        "INSERT INTO hostels "
+        "(name, type, owner_id, college, location, distance, "
+        "latitude, longitude, rent, rooms, rating, status, live, views, "
         "amenities, description, image) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s)"
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) "
         "RETURNING id",
         (
-    name,
-    data.get("type", "Boys Hostel"),
-    user["id"],
-    data.get("college", COLLEGES[0]),
-    location,
-    float(data.get("distance") or 0.5),
-    data.get("latitude"),
-    data.get("longitude"),
-    int(rent),
-    int(data.get("rooms") or 1),
-    ",".join(data.get("amenities") or []),
-    (data.get("description") or "").strip(),
-    data.get("image"),
-)
+            name,
+            data.get("type", "Boys Hostel"),
+            user["id"],
+            data.get("college", COLLEGES[0]),
+            location,
+            float(data.get("distance") or 0.5),
+            data.get("latitude"),
+            data.get("longitude"),
+            int(rent),
+            int(data.get("rooms") or 1),
+            ",".join(data.get("amenities") or []),
+            (data.get("description") or "").strip(),
+            data.get("image"),
+        ),
+    )
+
     new_id = cur.fetchone()["id"]
     db.commit()
-    row = hostel_or_404(db, new_id)
-    return jsonify({"hostel": hostel_public(row)}), 201
 
+    row = hostel_or_404(db, new_id)
+
+    return jsonify({"hostel": hostel_public(row)}), 201
 
 @app.put("/api/hostels/<int:hostel_id>")
 def api_update_hostel(hostel_id):
