@@ -681,7 +681,8 @@ def api_signup():
 
     session["user_id"] = row["id"]
 
-    return jsonify({"user": user_public(row)}), 201@app.post("/api/auth/logout")
+    return jsonify({"user": user_public(row)}), 201
+@app.post("/api/auth/logout")
 def api_logout():
     session.clear()
     return jsonify({"ok": True})
