@@ -762,12 +762,25 @@ def api_create_hostel():
     db = get_db()
     cur = db.execute(
         "INSERT INTO hostels (name, type, owner_id, college, location, distance, rent, rooms, rating, "
-        "status, live, views, amenities, description, image) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) RETURNING id",
-        (name, data.get("type", "Boys Hostel"), user["id"], data.get("college", COLLEGES[0]), location,
-         float(data.get("distance") or 0.5), int(rent), int(data.get("rooms") or 1),
-         ",".join(data.get("amenities") or []), (data.get("description") or "").strip(), data.get("image")),
-    )
+        "status, live, views,"
+        "amenities, description, image) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s)"
+        "RETURNING id",
+        (
+    name,
+    data.get("type", "Boys Hostel"),
+    user["id"],
+    data.get("college", COLLEGES[0]),
+    location,
+    float(data.get("distance") or 0.5),
+    data.get("latitude"),
+    data.get("longitude"),
+    int(rent),
+    int(data.get("rooms") or 1),
+    ",".join(data.get("amenities") or []),
+    (data.get("description") or "").strip(),
+    data.get("image"),
+)
     new_id = cur.fetchone()["id"]
     db.commit()
     row = hostel_or_404(db, new_id)
