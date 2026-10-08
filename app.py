@@ -18,6 +18,7 @@ Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
 # GitHub 1st deployment test - 2026-10-03
+import requests
 import os
 import re
 from datetime import date, datetime
@@ -182,6 +183,8 @@ CREATE TABLE IF NOT EXISTS hostels (
     owner_id INTEGER NOT NULL REFERENCES users(id),
     college TEXT NOT NULL,
     location TEXT NOT NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
     distance REAL NOT NULL,
     rent INTEGER NOT NULL,
     rooms INTEGER NOT NULL,
@@ -193,6 +196,12 @@ CREATE TABLE IF NOT EXISTS hostels (
     description TEXT,
     image TEXT
 );
+
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 
 CREATE TABLE IF NOT EXISTS inquiries (
     id SERIAL PRIMARY KEY,
@@ -380,6 +389,8 @@ def hostel_public(row):
     return {
         "id": row["id"], "name": row["name"], "type": row["type"],
         "ownerId": row["owner_id"], "college": row["college"], "location": row["location"],
+        "latitude": row["latitude"],
+        "longitude": row["longitude"],
         "distance": row["distance"], "rent": row["rent"], "rooms": row["rooms"],
         "rating": row["rating"], "status": row["status"], "live": bool(row["live"]),
         "views": row["views"],
@@ -457,10 +468,68 @@ def static_files(filename):
 # Meta / bootstrap
 # ---------------------------------------------------------------- #
 
+@app.post("/api/geocode")
+def api_geocode():
+    user, err = require_role("owner")
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    address = str(data.get("address", "")).strip()
+
+    if not address:
+        return error("Please enter a location.", 400)
+
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "q": address,
+                "format": "jsonv2",
+                "limit": 1,
+                "countrycodes": "in",
+            },
+            headers={
+                "User-Agent": "HostelHub/1.0 (student project)",
+                "Referer": request.host_url,
+            },
+            timeout=10,
+        )
+
+        response.raise_for_status()
+        results = response.json()
+
+    except requests.RequestException:
+        return error(
+            "Unable to search the location right now. Please try again.",
+            502,
+        )
+
+    if not results:
+        return error(
+            "Location not found. Please try a more specific address.",
+            404,
+        )
+
+    result = results[0]
+
+    try:
+        latitude = float(result["lat"])
+        longitude = float(result["lon"])
+    except (KeyError, TypeError, ValueError):
+        return error("Invalid location data received.", 502)
+
+    return jsonify(
+        {
+            "ok": True,
+            "latitude": latitude,
+            "longitude": longitude,
+            "display_name": result.get("display_name", address),
+        }
+    )
 @app.get("/api/meta")
 def api_meta():
     return jsonify({"colleges": COLLEGES, "amenities": AMENITY_DEFS})
-
 
 @app.get("/api/state")
 def api_state():
@@ -583,20 +652,25 @@ def api_signup():
 
     try:
         cur = db.execute(
-            "INSERT INTO users "
-            "(name, username, email, phone, role, joined, status, password_hash) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-            (
-                name,
-                username,
-                email,
-                phone,
-                role,
-                date.today().isoformat(),
-                "active",
-                generate_password_hash(password),
-            ),
-        )
+    "INSERT INTO hostels (name, type, owner_id, college, location, latitude, longitude, "
+    "distance, rent, rooms, rating, status, live, views, amenities, description, image) "
+    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) RETURNING id",
+    (
+        name,
+        data.get("type", "Boys Hostel"),
+        user["id"],
+        data.get("college", COLLEGES[0]),
+        location,
+        data.get("latitude"),
+        data.get("longitude"),
+        float(data.get("distance") or 0.5),
+        int(rent),
+        int(data.get("rooms") or 1),
+        ",".join(data.get("amenities") or []),
+        (data.get("description") or "").strip(),
+        data.get("image"),
+    ),
+)
     except pg_errors.UniqueViolation:
         db.rollback()
         return error("That username is already taken.")
@@ -688,12 +762,25 @@ def api_create_hostel():
     db = get_db()
     cur = db.execute(
         "INSERT INTO hostels (name, type, owner_id, college, location, distance, rent, rooms, rating, "
-        "status, live, views, amenities, description, image) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) RETURNING id",
-        (name, data.get("type", "Boys Hostel"), user["id"], data.get("college", COLLEGES[0]), location,
-         float(data.get("distance") or 0.5), int(rent), int(data.get("rooms") or 1),
-         ",".join(data.get("amenities") or []), (data.get("description") or "").strip(), data.get("image")),
-    )
+        "status, live, views,"
+        "amenities, description, image) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s)"
+        "RETURNING id",
+        (
+    name,
+    data.get("type", "Boys Hostel"),
+    user["id"],
+    data.get("college", COLLEGES[0]),
+    location,
+    float(data.get("distance") or 0.5),
+    data.get("latitude"),
+    data.get("longitude"),
+    int(rent),
+    int(data.get("rooms") or 1),
+    ",".join(data.get("amenities") or []),
+    (data.get("description") or "").strip(),
+    data.get("image"),
+)
     new_id = cur.fetchone()["id"]
     db.commit()
     row = hostel_or_404(db, new_id)
@@ -720,14 +807,24 @@ def api_update_hostel(hostel_id):
         return error("Please fill in property name, location and rent.")
 
     db.execute(
-        "UPDATE hostels SET name=%s, type=%s, college=%s, distance=%s, location=%s, rent=%s, rooms=%s, "
-        "description=%s, amenities=%s, image=%s WHERE id=%s",
-        (name, data.get("type", h["type"]), data.get("college", h["college"]),
-         float(data.get("distance", h["distance"])), location, int(rent),
-         int(data.get("rooms", h["rooms"])), (data.get("description", h["description"]) or "").strip(),
-         ",".join(data.get("amenities", h["amenities"].split(","))),
-         data.get("image", h["image"]), hostel_id),
-    )
+      "UPDATE hostels SET name=%s, type=%s, college=%s, distance=%s, location=%s, "
+      "latitude=%s, longitude=%s, rent=%s, rooms=%s, description=%s, amenities=%s, image=%s "
+      "WHERE id=%s",
+        (
+    name,
+    data.get("type", h["type"]),
+    data.get("college", h["college"]),
+    float(data.get("distance", h["distance"])),
+    location,
+    data.get("latitude", h["latitude"]),
+    data.get("longitude", h["longitude"]),
+    int(rent),
+    int(data.get("rooms", h["rooms"])),
+    (data.get("description", h["description"]) or "").strip(),
+    ",".join(data.get("amenities", h["amenities"].split(","))),
+    data.get("image", h["image"]),
+    hostel_id,
+)
     db.commit()
     row = hostel_or_404(db, hostel_id)
     return jsonify({"hostel": hostel_public(row)})

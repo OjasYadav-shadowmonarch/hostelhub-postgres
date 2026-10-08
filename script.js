@@ -1231,6 +1231,56 @@ async function markInquiryResponded(id) {
 }
 
 /* ---------------------- Add / edit listing modal ---------------------- */
+function initializeListingMap(editing) {
+  const mapElement = $("#listingMap");
+  if (!mapElement || typeof maplibregl === "undefined") return;
+
+  const latitude = editing && editing.latitude != null
+    ? Number(editing.latitude)
+    : 20.5937;
+
+  const longitude = editing && editing.longitude != null
+    ? Number(editing.longitude)
+    : 78.9629;
+
+  const map = new maplibregl.Map({
+    container: "listingMap",
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [longitude, latitude],
+    zoom: editing && editing.latitude != null ? 15 : 5
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  const marker = new maplibregl.Marker({
+    draggable: true
+  })
+    .setLngLat([longitude, latitude])
+    .addTo(map);
+
+  const updateCoordinates = () => {
+    const position = marker.getLngLat();
+
+    $("#listingLatitude").value = position.lat;
+    $("#listingLongitude").value = position.lng;
+
+    $("#listingMapStatus").textContent =
+      `Selected location: ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
+  };
+
+  marker.on("dragend", updateCoordinates);
+
+  map.on("load", () => {
+    map.resize();
+
+    if (editing && editing.latitude != null && editing.longitude != null) {
+      updateCoordinates();
+    }
+  });
+
+  window.hostelHubListingMap = map;
+  window.hostelHubListingMarker = marker;
+}
 
 function openListingModal(id) {
   const editing = id ? findHostel(id) : null;
@@ -1274,9 +1324,41 @@ function openListingModal(id) {
         <input type="number" id="listingDistance" min="0" step="0.1" value="${editing ? editing.distance : "0.5"}" />
       </div>
       <div class="field-group">
-        <label>Location / Area *</label>
-        <input type="text" id="listingLocation" placeholder="e.g. North Campus, DU" value="${editing ? esc(editing.location) : ""}" />
-      </div>
+  <label>Location / Area *</label>
+  <input
+    type="text"
+    id="listingLocation"
+    placeholder="e.g. North Campus, DU"
+    value="${editing ? esc(editing.location) : ""}"
+  />
+</div>
+
+<div class="field-group listing-map-group">
+  <label>Property Location on Map</label>
+
+  <div class="map-search-row">
+    <input
+      type="text"
+      id="listingMapSearch"
+      placeholder="Search your property location..."
+      value="${editing ? esc(editing.location) : ""}"/>
+    <button
+      type="button"
+      class="btn"
+      data-action="search-listing-location">
+      Search Location
+    </button>
+  </div>
+
+  <div id="listingMap" class="listing-map"></div>
+
+  <div id="listingMapStatus" class="map-status">
+    Search for your property and adjust the marker if needed.
+  </div>
+
+  <input type="hidden" id="listingLatitude" value="${editing && editing.latitude != null ? editing.latitude : ""}" />
+  <input type="hidden" id="listingLongitude" value="${editing && editing.longitude != null ? editing.longitude : ""}" />
+</div>
       <div class="field-group">
         <label>Monthly Rent (₹) *</label>
         <input type="number" id="listingRent" min="0" placeholder="8000" value="${editing ? editing.rent : ""}" />
@@ -1304,6 +1386,8 @@ function openListingModal(id) {
       <button class="btn btn-gold" data-action="submit-listing">${editing ? "Save Changes" : "Submit Listing"}</button>
     </div>
   `);
+   
+   initializeListingMap(editing);
 }
 
 function handleImageUpload(file) {
@@ -1323,6 +1407,8 @@ async function submitListingForm() {
   const college = $("#listingCollege").value;
   const distance = parseFloat($("#listingDistance").value) || 0.5;
   const location = $("#listingLocation").value.trim();
+  const latitude = $("#listingLatitude").value;
+  const longitude = $("#listingLongitude").value;
   const rent = parseInt($("#listingRent").value, 10);
   const rooms = parseInt($("#listingRooms").value, 10) || 1;
   const description = $("#listingDescription").value.trim();
@@ -1335,7 +1421,20 @@ async function submitListingForm() {
   }
 
   const image = state.listingImageData || urlField || null;
-  const payload = { name, type, college, distance, location, rent, rooms, description, amenities, image };
+  const payload = {
+  name,
+  type,
+  college,
+  distance,
+  location,
+  rent,
+  rooms,
+  description,
+  amenities,
+  image,
+  latitude,
+  longitude
+};
 
   try {
     if (state.editingHostelId) {
@@ -1675,7 +1774,72 @@ async function resetData() {
 }
 
 /* ---------------------- Delegated actions ---------------------- */
+async function searchListingLocation() {
+  const searchInput = $("#listingMapSearch");
+  const locationInput = $("#listingLocation");
+  const status = $("#listingMapStatus");
 
+  if (!searchInput) return;
+
+  const address = searchInput.value.trim();
+
+  if (!address) {
+    showToast("Please enter a location to search.", "error");
+    return;
+  }
+
+  if (status) {
+    status.textContent = "Searching location...";
+  }
+
+  try {
+    const data = await api("/geocode", {
+      method: "POST",
+      body: {
+        address
+      }
+    });
+
+    const latitude = Number(data.latitude);
+    const longitude = Number(data.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error("Invalid coordinates received.");
+    }
+
+    $("#listingLatitude").value = latitude;
+    $("#listingLongitude").value = longitude;
+
+    if (locationInput && data.display_name) {
+      locationInput.value = data.display_name;
+    }
+
+    if (window.hostelHubListingMap && window.hostelHubListingMarker) {
+      window.hostelHubListingMarker.setLngLat([longitude, latitude]);
+
+      window.hostelHubListingMap.flyTo({
+        center: [longitude, latitude],
+        zoom: 15,
+        essential: true
+      });
+    }
+
+    if (status) {
+      status.textContent =
+        `Location selected: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    }
+
+    showToast("Location found successfully.", "success");
+
+  } catch (err) {
+    if (status) {
+      status.textContent =
+        "Location could not be found. Try a more specific address.";
+    }
+
+    showToast(err.message, "error");
+  }
+}
 const ACTIONS = {
   "toggle-password": (id, btn) => togglePassword(btn),
   "login": () => handleLogin(),
@@ -1718,7 +1882,8 @@ const ACTIONS = {
   "reset-data": () => resetData(),
   "save-profile": () => saveProfile(),
   "save-password": () => savePassword(),
-  "upload-image-trigger": () => document.getElementById("listingImageFile").click()
+  "upload-image-trigger": () => document.getElementById("listingImageFile").click(),
+  "search-listing-location": () => searchListingLocation()
 };
 
 document.addEventListener("click", (e) => {
