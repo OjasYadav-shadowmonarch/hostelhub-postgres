@@ -18,6 +18,7 @@ Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
 # GitHub 1st deployment test - 2026-10-03
+import requests
 import os
 import re
 from datetime import date, datetime
@@ -468,6 +469,65 @@ def static_files(filename):
 # ---------------------------------------------------------------- #
 
 @app.get("/api/meta")
+@app.post("/api/geocode")
+def api_geocode():
+    user, err = require_role("owner")
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    address = str(data.get("address", "")).strip()
+
+    if not address:
+        return error("Please enter a location.", 400)
+
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "q": address,
+                "format": "jsonv2",
+                "limit": 1,
+                "countrycodes": "in",
+            },
+            headers={
+                "User-Agent": "HostelHub/1.0 (student project)",
+                "Referer": request.host_url,
+            },
+            timeout=10,
+        )
+
+        response.raise_for_status()
+        results = response.json()
+
+    except requests.RequestException:
+        return error(
+            "Unable to search the location right now. Please try again.",
+            502,
+        )
+
+    if not results:
+        return error(
+            "Location not found. Please try a more specific address.",
+            404,
+        )
+
+    result = results[0]
+
+    try:
+        latitude = float(result["lat"])
+        longitude = float(result["lon"])
+    except (KeyError, TypeError, ValueError):
+        return error("Invalid location data received.", 502)
+
+    return jsonify(
+        {
+            "ok": True,
+            "latitude": latitude,
+            "longitude": longitude,
+            "display_name": result.get("display_name", address),
+        }
+    )
 def api_meta():
     return jsonify({"colleges": COLLEGES, "amenities": AMENITY_DEFS})
 
