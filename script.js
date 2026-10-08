@@ -1758,7 +1758,72 @@ async function resetData() {
 }
 
 /* ---------------------- Delegated actions ---------------------- */
+async function searchListingLocation() {
+  const searchInput = $("#listingMapSearch");
+  const locationInput = $("#listingLocation");
+  const status = $("#listingMapStatus");
 
+  if (!searchInput) return;
+
+  const address = searchInput.value.trim();
+
+  if (!address) {
+    showToast("Please enter a location to search.", "error");
+    return;
+  }
+
+  if (status) {
+    status.textContent = "Searching location...";
+  }
+
+  try {
+    const data = await api("/geocode", {
+      method: "POST",
+      body: {
+        address
+      }
+    });
+
+    const latitude = Number(data.latitude);
+    const longitude = Number(data.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error("Invalid coordinates received.");
+    }
+
+    $("#listingLatitude").value = latitude;
+    $("#listingLongitude").value = longitude;
+
+    if (locationInput && data.display_name) {
+      locationInput.value = data.display_name;
+    }
+
+    if (window.hostelHubListingMap && window.hostelHubListingMarker) {
+      window.hostelHubListingMarker.setLngLat([longitude, latitude]);
+
+      window.hostelHubListingMap.flyTo({
+        center: [longitude, latitude],
+        zoom: 15,
+        essential: true
+      });
+    }
+
+    if (status) {
+      status.textContent =
+        `Location selected: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    }
+
+    showToast("Location found successfully.", "success");
+
+  } catch (err) {
+    if (status) {
+      status.textContent =
+        "Location could not be found. Try a more specific address.";
+    }
+
+    showToast(err.message, "error");
+  }
+}
 const ACTIONS = {
   "toggle-password": (id, btn) => togglePassword(btn),
   "login": () => handleLogin(),
@@ -1801,7 +1866,8 @@ const ACTIONS = {
   "reset-data": () => resetData(),
   "save-profile": () => saveProfile(),
   "save-password": () => savePassword(),
-  "upload-image-trigger": () => document.getElementById("listingImageFile").click()
+  "upload-image-trigger": () => document.getElementById("listingImageFile").click(),
+   "search-listing-location": () => searchListingLocation()
 };
 
 document.addEventListener("click", (e) => {
