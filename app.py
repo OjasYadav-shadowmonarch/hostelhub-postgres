@@ -795,41 +795,57 @@ def api_update_hostel(hostel_id):
     user, err = require_login()
     if err:
         return err
+
     db = get_db()
     h = hostel_or_404(db, hostel_id)
+
     if not h:
         return error("Listing not found.", 404)
+
     if user["role"] != "admin" and h["owner_id"] != user["id"]:
         return error("You don't have permission to edit this listing.", 403)
 
     data = request.get_json(silent=True) or {}
+
     name = (data.get("name") or h["name"]).strip()
     location = (data.get("location") or h["location"]).strip()
     rent = data.get("rent", h["rent"])
+
     if not name or not location or not rent:
         return error("Please fill in property name, location and rent.")
 
     db.execute(
-      "UPDATE hostels SET name=%s, type=%s, college=%s, distance=%s, location=%s, "
-      "latitude=%s, longitude=%s, rent=%s, rooms=%s, description=%s, amenities=%s, image=%s "
-      "WHERE id=%s",
+        "UPDATE hostels SET "
+        "name=%s, type=%s, college=%s, distance=%s, location=%s, "
+        "latitude=%s, longitude=%s, rent=%s, rooms=%s, "
+        "description=%s, amenities=%s, image=%s "
+        "WHERE id=%s",
         (
-    name,
-    data.get("type", h["type"]),
-    data.get("college", h["college"]),
-    float(data.get("distance", h["distance"])),
-    location,
-    data.get("latitude", h["latitude"]),
-    data.get("longitude", h["longitude"]),
-    int(rent),
-    int(data.get("rooms", h["rooms"])),
-    (data.get("description", h["description"]) or "").strip(),
-    ",".join(data.get("amenities", h["amenities"].split(","))),
-    data.get("image", h["image"]),
-    hostel_id,
-)
+            name,
+            data.get("type", h["type"]),
+            data.get("college", h["college"]),
+            float(data.get("distance", h["distance"])),
+            location,
+            data.get("latitude", h["latitude"]),
+            data.get("longitude", h["longitude"]),
+            int(rent),
+            int(data.get("rooms", h["rooms"])),
+            (data.get("description", h["description"]) or "").strip(),
+            ",".join(
+                data.get(
+                    "amenities",
+                    h["amenities"].split(",")
+                )
+            ),
+            data.get("image", h["image"]),
+            hostel_id,
+        ),
+    )
+
     db.commit()
+
     row = hostel_or_404(db, hostel_id)
+
     return jsonify({"hostel": hostel_public(row)})
 
 
