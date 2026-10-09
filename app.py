@@ -652,25 +652,21 @@ def api_signup():
 
     try:
         cur = db.execute(
-    "INSERT INTO hostels (name, type, owner_id, college, location, latitude, longitude, "
-    "distance, rent, rooms, rating, status, live, views, amenities, description, image) "
-    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) RETURNING id",
-    (
-        name,
-        data.get("type", "Boys Hostel"),
-        user["id"],
-        data.get("college", COLLEGES[0]),
-        location,
-        data.get("latitude"),
-        data.get("longitude"),
-        float(data.get("distance") or 0.5),
-        int(rent),
-        int(data.get("rooms") or 1),
-        ",".join(data.get("amenities") or []),
-        (data.get("description") or "").strip(),
-        data.get("image"),
-    ),
-)
+            "INSERT INTO users "
+            "(name, username, email, phone, role, joined, status, password_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+            "RETURNING id",
+            (
+                name,
+                username,
+                email,
+                phone,
+                role,
+                date.today().isoformat(),
+                "active",
+                generate_password_hash(password),
+            ),
+        )
     except pg_errors.UniqueViolation:
         db.rollback()
         return error("That username is already taken.")
@@ -684,9 +680,8 @@ def api_signup():
     ).fetchone()
 
     session["user_id"] = row["id"]
+
     return jsonify({"user": user_public(row)}), 201
-
-
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
@@ -752,81 +747,105 @@ def api_create_hostel():
     user, err = require_role("owner")
     if err:
         return err
+
     data = request.get_json(silent=True) or {}
+
     name = (data.get("name") or "").strip()
     location = (data.get("location") or "").strip()
     rent = data.get("rent")
+
     if not name or not location or not rent:
         return error("Please fill in property name, location and rent.")
 
     db = get_db()
+
     cur = db.execute(
-        "INSERT INTO hostels (name, type, owner_id, college, location, distance, rent, rooms, rating, "
-        "status, live, views,"
+        "INSERT INTO hostels "
+        "(name, type, owner_id, college, location, distance, "
+        "latitude, longitude, rent, rooms, rating, status, live, views, "
         "amenities, description, image) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s)"
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) "
         "RETURNING id",
         (
-    name,
-    data.get("type", "Boys Hostel"),
-    user["id"],
-    data.get("college", COLLEGES[0]),
-    location,
-    float(data.get("distance") or 0.5),
-    data.get("latitude"),
-    data.get("longitude"),
-    int(rent),
-    int(data.get("rooms") or 1),
-    ",".join(data.get("amenities") or []),
-    (data.get("description") or "").strip(),
-    data.get("image"),
-)
+            name,
+            data.get("type", "Boys Hostel"),
+            user["id"],
+            data.get("college", COLLEGES[0]),
+            location,
+            float(data.get("distance") or 0.5),
+            data.get("latitude"),
+            data.get("longitude"),
+            int(rent),
+            int(data.get("rooms") or 1),
+            ",".join(data.get("amenities") or []),
+            (data.get("description") or "").strip(),
+            data.get("image"),
+        ),
+    )
+
     new_id = cur.fetchone()["id"]
     db.commit()
-    row = hostel_or_404(db, new_id)
-    return jsonify({"hostel": hostel_public(row)}), 201
 
+    row = hostel_or_404(db, new_id)
+
+    return jsonify({"hostel": hostel_public(row)}), 201
 
 @app.put("/api/hostels/<int:hostel_id>")
 def api_update_hostel(hostel_id):
     user, err = require_login()
     if err:
         return err
+
     db = get_db()
     h = hostel_or_404(db, hostel_id)
+
     if not h:
         return error("Listing not found.", 404)
+
     if user["role"] != "admin" and h["owner_id"] != user["id"]:
         return error("You don't have permission to edit this listing.", 403)
 
     data = request.get_json(silent=True) or {}
+
     name = (data.get("name") or h["name"]).strip()
     location = (data.get("location") or h["location"]).strip()
     rent = data.get("rent", h["rent"])
+
     if not name or not location or not rent:
         return error("Please fill in property name, location and rent.")
 
     db.execute(
-      "UPDATE hostels SET name=%s, type=%s, college=%s, distance=%s, location=%s, "
-      "latitude=%s, longitude=%s, rent=%s, rooms=%s, description=%s, amenities=%s, image=%s "
-      "WHERE id=%s",
+        "UPDATE hostels SET "
+        "name=%s, type=%s, college=%s, distance=%s, location=%s, "
+        "latitude=%s, longitude=%s, rent=%s, rooms=%s, "
+        "description=%s, amenities=%s, image=%s "
+        "WHERE id=%s",
         (
-    name,
-    data.get("type", h["type"]),
-    data.get("college", h["college"]),
-    float(data.get("distance", h["distance"])),
-    location,
-    data.get("latitude", h["latitude"]),
-    data.get("longitude", h["longitude"]),
-    int(rent),
-    int(data.get("rooms", h["rooms"])),
-    (data.get("description", h["description"]) or "").strip(),
-    ",".join(data.get("amenities", h["amenities"].split(","))),
-    data.get("image", h["image"]),
-    hostel_id,
-)
+            name,
+            data.get("type", h["type"]),
+            data.get("college", h["college"]),
+            float(data.get("distance", h["distance"])),
+            location,
+            data.get("latitude", h["latitude"]),
+            data.get("longitude", h["longitude"]),
+            int(rent),
+            int(data.get("rooms", h["rooms"])),
+            (data.get("description", h["description"]) or "").strip(),
+            ",".join(
+                data.get(
+                    "amenities",
+                    h["amenities"].split(",")
+                )
+            ),
+            data.get("image", h["image"]),
+            hostel_id,
+        ),
+    )
+
     db.commit()
+
     row = hostel_or_404(db, hostel_id)
+
     return jsonify({"hostel": hostel_public(row)})
 
 
