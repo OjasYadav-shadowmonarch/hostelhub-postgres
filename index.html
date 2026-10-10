@@ -7,7 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="style.css?v=hero2" />
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 </head>
 <body>
 
@@ -43,6 +45,18 @@
 
   <!-- ---------- Hero ---------- -->
   <section class="l-hero">
+    <!-- Interactive animated background (moving map, glow, pins, cursor trail) -->
+    <div class="hh-bg" id="hhHeroBg" aria-hidden="true">
+      <div class="hh-map" id="hhMap"></div>
+      <div class="hh-glow" id="hhGlow"></div>
+      <div class="hh-vignette"></div>
+      <span class="hh-dot hh-d1"></span><span class="hh-dot hh-d2"></span>
+      <span class="hh-dot hh-d3"></span><span class="hh-dot hh-d4"></span>
+      <span class="hh-dot hh-d5"></span><span class="hh-dot hh-d6"></span>
+      <span class="hh-dot hh-d7"></span><span class="hh-dot hh-d8"></span>
+      <span class="hh-pin hh-pin1"></span><span class="hh-pin hh-pin2"></span>
+      <span class="hh-pin hh-pin3"></span><span class="hh-pin hh-pin4"></span>
+    </div>
     <div class="l-hero-bg" aria-hidden="true"></div>
     <div class="l-hero-inner">
 
@@ -258,6 +272,6 @@
 <!-- hidden file input reused by the listing form -->
 <input type="file" id="listingImageFile" accept="image/*" hidden />
 
-<script src="script.js"></script>
+<script src="script.js?v=hero2"></script>
 </body>
 </html>

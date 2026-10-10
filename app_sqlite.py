@@ -1,5 +1,15 @@
 """
-HostelHub backend (PostgreSQL edition)
+HostelHub backend (SQLite edition -- for Pyroid / phones / no database server)
+================================================================================
+Same routes, same JSON, same front end as app.py. The only difference is the
+storage layer: the database is a single file (hostelhub.db) next to this
+script, created automatically on first run. Nothing to install except Flask.
+
+    python app_sqlite.py
+
+(app.py is the PostgreSQL edition used for the Render deployment.)
+
+Original description of app.py follows.
 ========================================
 A single-file Flask app that:
   1. Serves the front end (index.html / style.css / script.js) as static
@@ -18,17 +28,24 @@ Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
 # GitHub 1st deployment test - 2026-10-03
-import requests
 import os
 import re
+import sqlite3
 from datetime import date, datetime
 
-import psycopg2
-import psycopg2.extras
-from dotenv import load_dotenv
 from flask import Flask, abort, g, jsonify, request, session, send_from_directory
-from psycopg2 import errors as pg_errors
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# Optional extras: the app still runs without them.
+try:
+    import requests          # only used by the owner's "find location" geocoder
+except ImportError:
+    requests = None
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*_a, **_k):
+        return False
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -61,29 +78,13 @@ app.secret_key = os.environ.get("SECRET_KEY") or "roomfinder-dev-secret-change-m
 # PostgreSQL connection settings (all from the environment / .env)
 # ---------------------------------------------------------------- #
 
-def db_config():
-    """Keyword arguments for psycopg2.connect().
-
-    DATABASE_URL wins if set (postgresql://user:pass@host:5432/dbname).
-    Otherwise the individual PG* variables are used; PGPASSWORD is left
-    out when unset so libpq can fall back to ~/.pgpass or trust auth.
-    """
-    url = os.environ.get("DATABASE_URL")
-    if url:
-        return {"dsn": url}
-    cfg = {
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": os.environ.get("PGPORT", "5432"),
-        "dbname": os.environ.get("PGDATABASE", "roomfinder"),
-        "user": os.environ.get("PGUSER", "postgres"),
-    }
-    if os.environ.get("PGPASSWORD"):
-        cfg["password"] = os.environ["PGPASSWORD"]
-    return cfg
+DB_PATH = os.environ.get("SQLITE_PATH") or os.path.join(BASE_DIR, "hostelhub.db")
 
 
 def connect():
-    return psycopg2.connect(**db_config())
+    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn.row_factory = lambda cur, row: {d[0]: row[i] for i, d in enumerate(cur.description)}
+    return conn
 
 
 # ---------------------------------------------------------------- #
@@ -114,29 +115,48 @@ AMENITY_DEFS = [
 # Database helpers
 # ---------------------------------------------------------------- #
 
+class _Result:
+    """Cursor-like result for INSERT ... RETURNING id (SQLite-friendly)."""
+
+    def __init__(self, cur, returning_id=False):
+        self._cur = cur
+        self._returning_id = returning_id
+        self.rowcount = cur.rowcount
+
+    def fetchone(self):
+        if self._returning_id:
+            return {"id": self._cur.lastrowid}
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+
 class PGConn:
-    """Thin wrapper so route code can keep calling
-    db.execute(sql, params).fetchone()/.fetchall() like it did with
-    sqlite3, instead of juggling cursors everywhere. Rows come back as
-    dicts, so row["column"] works exactly as before."""
+    """Keeps the PostgreSQL-style call sites unchanged: %s placeholders,
+    INSERT ... RETURNING id, dict rows. Everything is translated for SQLite."""
 
     def __init__(self, conn):
         self.conn = conn
 
+    @staticmethod
+    def _translate(sql):
+        returning = bool(re.search(r"\s+RETURNING\s+id\s*$", sql.strip(), re.I))
+        if returning:
+            sql = re.sub(r"\s+RETURNING\s+id\s*$", "", sql.strip(), flags=re.I)
+        return sql.replace("%s", "?"), returning
+
     def execute(self, sql, params=()):
-        cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(sql, params)
-        return cur
+        sql, returning = self._translate(sql)
+        cur = self.conn.execute(sql, tuple(params))
+        return _Result(cur, returning)
 
     def executemany(self, sql, seq_of_params):
-        cur = self.conn.cursor()
-        cur.executemany(sql, seq_of_params)
-        return cur
+        sql, _ = self._translate(sql)
+        return self.conn.executemany(sql, seq_of_params)
 
     def executescript(self, sql):
-        cur = self.conn.cursor()
-        cur.execute(sql)
-        return cur
+        return self.conn.executescript(sql)
 
     def commit(self):
         self.conn.commit()
@@ -165,50 +185,44 @@ def close_db(_exc):
 # IF NOT EXISTS, so running it against an existing database is safe.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     username TEXT UNIQUE NOT NULL,
     email TEXT,
     phone TEXT,
     role TEXT NOT NULL CHECK(role IN ('student','owner','admin')),
-    joined DATE NOT NULL,
+    joined TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     password_hash TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS hostels (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
     owner_id INTEGER NOT NULL REFERENCES users(id),
     college TEXT NOT NULL,
     location TEXT NOT NULL,
-    latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION,
+    latitude REAL,
+    longitude REAL,
     distance REAL NOT NULL,
     rent INTEGER NOT NULL,
     rooms INTEGER NOT NULL,
     rating REAL NOT NULL DEFAULT 4.0,
     status TEXT NOT NULL DEFAULT 'pending',
-    live BOOLEAN NOT NULL DEFAULT FALSE,
+    live INTEGER NOT NULL DEFAULT 0,
     views INTEGER NOT NULL DEFAULT 0,
     amenities TEXT NOT NULL DEFAULT '',
     description TEXT,
     image TEXT
 );
 
-ALTER TABLE hostels
-ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
-
-ALTER TABLE hostels
-ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
-
 CREATE TABLE IF NOT EXISTS inquiries (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL REFERENCES users(id),
     hostel_id INTEGER NOT NULL REFERENCES hostels(id),
     status TEXT NOT NULL DEFAULT 'pending',
-    date DATE NOT NULL,
+    date TEXT NOT NULL,
     message TEXT
 );
 
@@ -238,22 +252,22 @@ DEMO_USERS = [
 #  status, live, views, amenities, description, image)
 DEMO_HOSTELS = [
     (1, "Comfort Boys PG", "Boys Hostel", 1, COLLEGES[0], "0.5km from University Main Gate", 0.5,
-     7500, 20, 4.1, "verified", True, 145, "wifi,security,power",
+     7500, 20, 4.1, "verified", 1, 145, "wifi,security,power",
      "A quiet, secure PG for boys right by the main gate — five minutes to every lecture hall.", None),
     (2, "Elite Girls Residency", "Girls Hostel", 8, COLLEGES[0], "Near Engineering Block, College Road", 0.8,
-     9000, 32, 4.6, "verified", True, 518, "wifi,ac,food,laundry,security",
+     9000, 32, 4.6, "verified", 1, 518, "wifi,ac,food,laundry,security",
      "Premium girls' residency with home-style meals, daily housekeeping and a warm, supervised community.", None),
     (3, "Campus View PG", "PG/Rooms", 2, COLLEGES[0], "Opposite Main Library, Campus Road", 0.3,
-     8500, 15, 3.9, "pending", False, 0, "wifi,study",
+     8500, 15, 3.9, "pending", 0, 0, "wifi,study",
      "Compact rooms directly opposite the main library — built for late-night study sessions.", None),
     (4, "Sunshine Boys Hostel", "Boys Hostel", 1, COLLEGES[1], "1km from University, Market Street", 1.0,
-     7000, 25, 4.0, "verified", True, 289, "wifi,food,power,gym",
+     7000, 25, 4.0, "verified", 1, 289, "wifi,food,power,gym",
      "Budget-friendly rooms a short walk from the market, with a small in-house gym.", None),
     (5, "Heritage Girls Hostel", "Girls Hostel", 8, COLLEGES[1], "Old Campus Road, Heritage Colony", 1.2,
-     8200, 18, 4.4, "verified", True, 401, "wifi,ac,food,laundry,security,study",
+     8200, 18, 4.4, "verified", 1, 401, "wifi,ac,food,laundry,security,study",
      "A well-established hostel in a leafy colony, known for its strict security and study rooms.", None),
     (6, "Student PG Rooms", "PG/Rooms", 1, COLLEGES[1], "Back Gate Area, Student Lane", 0.6,
-     6500, 12, 3.8, "verified", True, 210, "wifi,power",
+     6500, 12, 3.8, "verified", 1, 210, "wifi,power",
      "No-frills rooms near the back gate — the cheapest verified option close to campus.", None),
 ]
 
@@ -265,16 +279,6 @@ DEMO_INQUIRIES = [
     (4, 6, 5, "pending", "2024-05-14", "Is food included in the rent you listed?"),
 ]
 
-# SERIAL sequences don't know about the explicit ids the demo rows use --
-# bump them past the highest id so the next signup / listing / inquiry
-# doesn't collide with a seeded row.
-SYNC_SEQUENCES = (
-    "SELECT setval(pg_get_serial_sequence('users', 'id'), (SELECT MAX(id) FROM users)); "
-    "SELECT setval(pg_get_serial_sequence('hostels', 'id'), (SELECT MAX(id) FROM hostels)); "
-    "SELECT setval(pg_get_serial_sequence('inquiries', 'id'), (SELECT MAX(id) FROM inquiries));"
-)
-
-
 def create_schema(db):
     db.executescript(SCHEMA)
 
@@ -285,7 +289,8 @@ def insert_demo_data(db):
     db.executemany(
         "INSERT INTO users (id, name, username, email, phone, role, joined, status, password_hash) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-        [u + (ph_admin if u[2] == ADMIN_USERNAME else ph,) for u in DEMO_USERS],
+        [u + (ph_admin if u[2] == ADMIN_USERNAME else ph,) for u in DEMO_USERS
+         if u[5] != "admin" or u[2] == ADMIN_USERNAME],
     )
     db.executemany(
         "INSERT INTO hostels (id, name, type, owner_id, college, location, distance, rent, rooms, rating, "
@@ -297,15 +302,14 @@ def insert_demo_data(db):
         "INSERT INTO inquiries (id, student_id, hostel_id, status, date, message) VALUES (%s,%s,%s,%s,%s,%s)",
         DEMO_INQUIRIES,
     )
-    db.executescript(SYNC_SEQUENCES)
 
 
 def seed(db):
     """Wipe everything and rebuild with the original demo dataset (admin 'Reset')."""
     db.executescript(
-        "DROP TABLE IF EXISTS inquiries CASCADE; "
-        "DROP TABLE IF EXISTS hostels CASCADE; "
-        "DROP TABLE IF EXISTS users CASCADE;"
+        "DROP TABLE IF EXISTS inquiries; "
+        "DROP TABLE IF EXISTS hostels; "
+        "DROP TABLE IF EXISTS users;"
     )
     create_schema(db)
     insert_demo_data(db)
@@ -315,18 +319,21 @@ def init_db():
     """Create the schema and provision the configured administrator."""
     try:
         conn = connect()
-    except psycopg2.OperationalError as exc:
+    except sqlite3.Error as exc:
         raise SystemExit(
-            "Could not connect to PostgreSQL. Check DATABASE_URL (or "
-            "PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD) "
-            "in your environment, and confirm the database exists.\n\n"
-            + str(exc)
+            "Could not open the SQLite database file at " + DB_PATH
+            + ". Check that the folder is writable.\n\n" + str(exc)
         )
 
     db = PGConn(conn)
 
     try:
         create_schema(db)
+
+        # First run on a brand-new database file: load the demo hostels so the
+        # site isn't empty. Set SEED_DEMO=0 to start completely blank.
+        if os.environ.get("SEED_DEMO", "1") != "0" and not db.execute("SELECT id FROM users LIMIT 1").fetchone():
+            insert_demo_data(db)
 
         if ADMIN_USERNAME and ADMIN_PASSWORD:
             existing_admin = db.execute(
@@ -479,6 +486,9 @@ def api_geocode():
 
     if not address:
         return error("Please enter a location.", 400)
+
+    if requests is None:
+        return error("Location search needs the 'requests' package (pip install requests).", 502)
 
     try:
         response = requests.get(
@@ -667,7 +677,7 @@ def api_signup():
                 generate_password_hash(password),
             ),
         )
-    except pg_errors.UniqueViolation:
+    except sqlite3.IntegrityError:
         db.rollback()
         return error("That username is already taken.")
 
@@ -764,7 +774,7 @@ def api_create_hostel():
         "(name, type, owner_id, college, location, distance, "
         "latitude, longitude, rent, rooms, rating, status, live, views, "
         "amenities, description, image) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',0,0,%s,%s,%s) "
         "RETURNING id",
         (
             name,
@@ -877,7 +887,7 @@ def api_toggle_availability(hostel_id):
         return error("Listing not found.", 404)
     if h["status"] != "verified":
         return error("Only verified listings can be toggled.")
-    db.execute("UPDATE hostels SET live=%s WHERE id=%s", (not h["live"], hostel_id))
+    db.execute("UPDATE hostels SET live=%s WHERE id=%s", (0 if h["live"] else 1, hostel_id))
     db.commit()
     return jsonify({"hostel": hostel_public(hostel_or_404(db, hostel_id))})
 
@@ -891,7 +901,7 @@ def api_approve_hostel(hostel_id):
     h = hostel_or_404(db, hostel_id)
     if not h:
         return error("Listing not found.", 404)
-    db.execute("UPDATE hostels SET status='verified', live=TRUE WHERE id=%s", (hostel_id,))
+    db.execute("UPDATE hostels SET status='verified', live=1 WHERE id=%s", (hostel_id,))
     db.commit()
     return jsonify({"hostel": hostel_public(hostel_or_404(db, hostel_id))})
 

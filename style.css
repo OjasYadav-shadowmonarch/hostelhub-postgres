@@ -850,3 +850,173 @@ tbody tr:hover { background: var(--surface-2); }
   .view-root { padding: 20px 14px 60px; }
   .listing-row { flex-wrap: wrap; }
 }
+/* ---------------------- Listing map ---------------------- */
+
+.listing-map-group {
+  width: 100%;
+}
+
+.map-search-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.map-search-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-search-row .btn {
+  white-space: nowrap;
+}
+
+.listing-map {
+  width: 100%;
+  height: 320px;
+  min-height: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 8px;
+}
+
+.map-status {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+@media (max-width: 700px) {
+  .map-search-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .map-search-row .btn {
+    width: 100%;
+  }
+
+  .listing-map {
+    height: 280px;
+    min-height: 280px;
+  }
+}
+
+/* =========================================================
+   Hero interactive background (map + glow + pins + trail)
+   All classes are prefixed hh- so they never clash with the app.
+   ========================================================= */
+.hh-bg {
+  --hh-map-base: #10223c;
+  --hh-road-a: rgba(255, 255, 255, 0.07);
+  --hh-road-b: rgba(255, 255, 255, 0.05);
+  --hh-grid-dot: rgba(255, 255, 255, 0.10);
+  --hh-accent: #38bdf8;
+  --hh-accent-rgb: 56, 189, 248;
+  --hh-particle: rgba(255, 255, 255, 0.75);
+  --hh-vignette: rgba(3, 10, 25, 0.78);
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  background: radial-gradient(circle at center, rgba(30, 80, 130, 0.25), transparent 65%), #07111f;
+  /* fade into the next section instead of a hard edge */
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+}
+body.light-theme .hh-bg {
+  --hh-map-base: #e3e1d4;
+  --hh-road-a: rgba(20, 30, 60, 0.08);
+  --hh-road-b: rgba(20, 30, 60, 0.06);
+  --hh-grid-dot: rgba(20, 30, 60, 0.12);
+  --hh-accent: #2a8fd0;
+  --hh-accent-rgb: 42, 143, 208;
+  --hh-particle: rgba(30, 50, 90, 0.45);
+  --hh-vignette: rgba(243, 242, 236, 0.85);
+  background: radial-gradient(circle at center, rgba(120, 170, 220, 0.25), transparent 65%), #f3f2ec;
+}
+
+.hh-map {
+  position: absolute; width: 140%; height: 140%; left: -20%; top: -20%;
+  background-color: var(--hh-map-base);
+  background-image:
+    linear-gradient(25deg,  transparent 47%, var(--hh-road-a) 48%, var(--hh-road-a) 50%, transparent 51%),
+    linear-gradient(145deg, transparent 47%, var(--hh-road-b) 48%, var(--hh-road-b) 50%, transparent 51%),
+    radial-gradient(circle, var(--hh-grid-dot) 1px, transparent 1px);
+  background-size: 180px 180px, 220px 220px, 45px 45px;
+  transform: translate3d(var(--hh-map-x, 0px), var(--hh-map-y, 0px), 0);
+  transition: transform 0.12s ease-out;
+  animation: hhMapMove 20s linear infinite;
+  will-change: transform, background-position;
+}
+@keyframes hhMapMove {
+  0%   { background-position: 0 0, 0 0, 0 0; }
+  100% { background-position: 180px 180px, -220px 220px, 45px 45px; }
+}
+
+.hh-glow {
+  position: absolute; width: 500px; height: 500px; left: 50%; top: 50%;
+  margin: -250px 0 0 -250px; border-radius: 50%; z-index: 1;
+  background: radial-gradient(circle, rgba(var(--hh-accent-rgb), 0.14), transparent 70%);
+  transform: translate3d(var(--hh-glow-x, 0px), var(--hh-glow-y, 0px), 0);
+  transition: transform 0.25s ease-out;
+}
+.hh-vignette {
+  position: absolute; inset: 0; z-index: 2;
+  background: radial-gradient(circle at center, transparent 0%, rgba(3, 10, 25, 0.25) 45%, var(--hh-vignette) 100%);
+}
+body.light-theme .hh-vignette {
+  background: radial-gradient(circle at center, transparent 0%, rgba(243, 242, 236, 0.30) 55%, var(--hh-vignette) 100%);
+}
+
+.hh-dot {
+  position: absolute; z-index: 3; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--hh-particle); box-shadow: 0 0 8px var(--hh-particle);
+  animation: hhFloat 6s ease-in-out infinite;
+}
+.hh-d1 { left: 8%;  top: 20%; }
+.hh-d2 { left: 18%; top: 70%; animation-delay: 1s; }
+.hh-d3 { left: 35%; top: 25%; animation-delay: 2s; }
+.hh-d4 { left: 52%; top: 75%; animation-delay: 3s; }
+.hh-d5 { left: 70%; top: 20%; animation-delay: 4s; }
+.hh-d6 { left: 85%; top: 65%; animation-delay: 2s; }
+.hh-d7 { left: 90%; top: 30%; animation-delay: 1.5s; }
+.hh-d8 { left: 45%; top: 50%; animation-delay: 3.5s; }
+@keyframes hhFloat {
+  0%, 100% { transform: translateY(0);     opacity: 0.25; }
+  50%      { transform: translateY(-45px); opacity: 0.8; }
+}
+
+.hh-pin {
+  position: absolute; z-index: 4; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--hh-accent);
+  box-shadow: 0 0 0 7px rgba(var(--hh-accent-rgb), 0.12), 0 0 20px rgba(var(--hh-accent-rgb), 0.8);
+  animation: hhPulse 2.5s ease-in-out infinite;
+}
+.hh-pin1 { left: 20%; top: 30%; }
+.hh-pin2 { left: 70%; top: 25%; animation-delay: 0.7s; }
+.hh-pin3 { left: 60%; top: 70%; animation-delay: 1.4s; }
+.hh-pin4 { left: 30%; top: 75%; animation-delay: 2s; }
+@keyframes hhPulse {
+  0%, 100% { transform: scale(1);    opacity: 0.7; }
+  50%      { transform: scale(1.35); opacity: 1; }
+}
+
+/* cursor / touch trail — created by JS, hidden until the pointer moves */
+.hh-trail {
+  position: absolute; z-index: 3; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--hh-accent);
+  box-shadow: 0 0 8px var(--hh-accent), 0 0 18px rgba(var(--hh-accent-rgb), 0.7);
+  transform: translate(-50%, -50%); opacity: 0; will-change: left, top, transform, opacity;
+}
+.hh-bg:not(.hh-active) .hh-trail { visibility: hidden; }
+
+@media (max-width: 700px) {
+  .hh-glow { width: 300px; height: 300px; margin: -150px 0 0 -150px; }
+  .hh-trail { width: 6px; height: 6px; }
+  .hh-pin { width: 9px; height: 9px; box-shadow: 0 0 0 4px rgba(var(--hh-accent-rgb), 0.12), 0 0 12px rgba(var(--hh-accent-rgb), 0.7); }
+  .hh-map { transition: transform 0.2s ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hh-map, .hh-dot, .hh-pin { animation: none; }
+  .hh-map, .hh-glow { transition: none; }
+}
