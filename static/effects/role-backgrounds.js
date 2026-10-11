@@ -6,6 +6,11 @@
 
   const mobile = window.matchMedia("(max-width: 700px)");
 
+  /**
+   * Wires up the animated canvas background for a single role screen.
+   * @param {Element} root - The `.role-bg` element containing the canvas and glow layer.
+   * @returns {{start: Function, stop: Function}|undefined} Controls for the animation loop, if setup succeeded.
+   */
   function setupBackground(root) {
     const canvas = root.querySelector(".role-bg-canvas");
     const glow = root.querySelector(".role-bg-glow");
@@ -19,9 +24,70 @@
     let raf = 0;
     let lastDraw = 0;
 
-    
-function resize() {
-  const rect = root.getBoundingClientRect();
+
+    // Shared pointer position for mouse, pen, and touch.
+    const pointer = { x: 0, y: 0, active: false };
+
+    /**
+     * Recalculates canvas dimensions and particle counts to match the
+     * current size of the role screen, then draws a static first frame.
+     */
+    function resize() {
+      const rect = root.getBoundingClientRect();
+
+      if (rect.width === 0 || rect.height === 0) {
+        stop();
+        return;
+      }
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+
+      width = rect.width;
+      height = rect.height;
+
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const role = root.parentElement?.dataset.bgRole || "student";
+      const density = mobile.matches ? 19000 : 12000;
+      const limit =
+        role === "admin" ? 62 :
+        role === "owner" ? 50 : 70;
+
+      const count = Math.min(
+        limit,
+        Math.max(18, Math.floor((width * height) / density))
+      );
+
+      particles = Array.from({ length: count }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        r: Math.random() * 1.6 + 0.7
+      }));
+
+      draw(performance.now(), true);
+    }
+
+    /**
+     * Renders a single frame of the role-specific background effect.
+     * @param {number} time - Timestamp (ms) from the animation loop or `performance.now()`.
+     * @param {boolean} [staticFrame=false] - When true, skips particle motion for a still frame.
+     */
+    function draw(time, staticFrame = false) {
+      const accent =
+        getComputedStyle(root)
+          .getPropertyValue("--role-accent")
+          .trim() || "52, 211, 224";
+
+      const role = root.parentElement?.dataset.bgRole || "student";
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Keep the rest of your existing draw() function here.
 
   // The screen may still be hidden during initialization.
   if (rect.width === 0 || rect.height === 0) {
@@ -57,7 +123,13 @@ function resize() {
   draw(performance.now(), true);
 }
 
-   
+
+/**
+ * Renders a single frame of the role-specific background effect, drawing
+ * the student network, owner blueprint, admin radar, or fallback particles.
+ * @param {number} time - Timestamp (ms) from the animation loop or `performance.now()`.
+ * @param {boolean} [staticFrame=false] - When true, skips particle motion for a still frame.
+ */
 function draw(time, staticFrame = false) {
   const accent = getComputedStyle(root)
     .getPropertyValue("--role-accent")
@@ -252,6 +324,11 @@ function draw(time, staticFrame = false) {
   }
 }
 
+    /**
+     * `requestAnimationFrame` callback that throttles drawing to roughly
+     * 30ms per frame and pauses while the screen is hidden.
+     * @param {number} time - Timestamp (ms) supplied by `requestAnimationFrame`.
+     */
     function animate(time) {
       raf = 0;
 
@@ -265,6 +342,10 @@ function draw(time, staticFrame = false) {
       raf = requestAnimationFrame(animate);
     }
 
+    /**
+     * Starts the animation loop, or draws a single static frame when
+     * reduced motion is preferred or the screen is hidden.
+     */
     function start() {
       if (raf || document.hidden || root.closest("[hidden]")) return;
 
@@ -276,26 +357,68 @@ function draw(time, staticFrame = false) {
       raf = requestAnimationFrame(animate);
     }
 
+    /**
+     * Cancels any pending animation frame, pausing the background effect.
+     */
     function stop() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
     }
 
-    root.addEventListener("pointermove", event => {
-      if (mobile.matches || reduceMotion.matches || !glow) return;
-
+    // Shared pointer handler for mouse, pen, and touch.
+    /**
+     * Updates the shared pointer position and glow CSS variables from a
+     * pointer event, redrawing immediately when reduced motion is active.
+     * @param {PointerEvent} event - The originating pointermove/pointerdown event.
+     */
+    function updatePointer(event) {
       const rect = root.getBoundingClientRect();
-      glow.style.setProperty("--glow-x", `${event.clientX - rect.left}px`);
-      glow.style.setProperty("--glow-y", `${event.clientY - rect.top}px`);
-    }, { passive: true });
+
+      pointer.x = Math.max(0, Math.min(width, event.clientX - rect.left));
+      pointer.y = Math.max(0, Math.min(height, event.clientY - rect.top));
+      pointer.active = true;
+
+      if (glow) {
+        glow.style.setProperty("--glow-x", `${pointer.x}px`);
+        glow.style.setProperty("--glow-y", `${pointer.y}px`);
+      }
+
+      if (reduceMotion.matches) {
+        draw(0, true);
+      }
+    }
+
+    // Listen on the containing screen so the background
+    // reacts without blocking clicks on buttons or form fields.
+    const interactionSurface = root.parentElement;
+
+    interactionSurface?.addEventListener("pointermove", updatePointer, {
+      passive: true
+    });
+
+    interactionSurface?.addEventListener("pointerdown", updatePointer, {
+      passive: true
+    });
+
+    interactionSurface?.addEventListener(
+      "pointerup",
+      (event) => {
+        if (event.pointerType === "touch") {
+          pointer.active = false;
+        }
+      },
+      { passive: true }
+    );
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) stop();
       else start();
     });
 
-    
-window.addEventListener("resize", resize, { passive: true });
+    window.addEventListener("resize", resize, {
+      passive: true
+    });
+
 
 const resizeObserver = new ResizeObserver(() => {
   const rect = root.getBoundingClientRect();
@@ -331,3 +454,13 @@ resizeObserver.observe(root);
   window.HostelHubRoleBackgrounds.setup();
 })();
 
+// Initialize role backgrounds after the document is parsed.
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => window.HostelHubRoleBackgrounds?.setup(),
+    { once: true }
+  );
+} else {
+  window.HostelHubRoleBackgrounds?.setup();
+}
