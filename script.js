@@ -1947,3 +1947,103 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+/* =========================================================
+   Landing hero — interactive background
+   Moving map parallax, cursor glow and particle trail.
+   - Tracks the pointer only inside the hero (native cursor is kept)
+   - Pauses when the hero is off-screen or the landing page is hidden
+   - Skips the trail entirely for prefers-reduced-motion
+   ========================================================= */
+function initHeroBackground() {
+  const hero = document.querySelector(".l-hero");
+  const bg = document.getElementById("hhHeroBg");
+  if (!hero || !bg) return;
+
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) return; // static background only (CSS already stops animations)
+
+  const isMobile = window.matchMedia("(max-width: 700px)").matches;
+  const mapStrength = isMobile ? 15 : 35;
+  const glowStrength = isMobile ? 100 : 250;
+  const trailCount = isMobile ? 12 : 20;
+
+  let targetX = hero.clientWidth / 2, targetY = hero.clientHeight / 2;
+  let curX = targetX, curY = targetY;
+  let running = false, rafId = 0, idleTimer = 0;
+
+  // Build the trail
+  const trail = [];
+  for (let i = 0; i < trailCount; i++) {
+    const el = document.createElement("div");
+    el.className = "hh-trail";
+    bg.appendChild(el);
+    trail.push({ el, x: targetX, y: targetY });
+  }
+
+  function setTarget(clientX, clientY) {
+    const r = hero.getBoundingClientRect();
+    targetX = clientX - r.left;
+    targetY = clientY - r.top;
+    bg.classList.add("hh-active");
+    clearTimeout(idleTimer);
+    // fade the trail out shortly after the pointer stops / lifts
+    idleTimer = setTimeout(() => bg.classList.remove("hh-active"), 1800);
+    start();
+  }
+
+  hero.addEventListener("mousemove", (e) => setTarget(e.clientX, e.clientY));
+  hero.addEventListener("mouseleave", () => { bg.classList.remove("hh-active"); });
+  hero.addEventListener("touchstart", (e) => { const t = e.touches[0]; if (t) setTarget(t.clientX, t.clientY); }, { passive: true });
+  hero.addEventListener("touchmove", (e) => { const t = e.touches[0]; if (t) setTarget(t.clientX, t.clientY); }, { passive: true });
+
+  function frame() {
+    curX += (targetX - curX) * 0.15;
+    curY += (targetY - curY) * 0.15;
+
+    const w = hero.clientWidth || 1, h = hero.clientHeight || 1;
+    const nx = curX / w - 0.5, ny = curY / h - 0.5;
+    const s = bg.style;
+    s.setProperty("--hh-map-x", (nx * mapStrength).toFixed(2) + "px");
+    s.setProperty("--hh-map-y", (ny * mapStrength).toFixed(2) + "px");
+    s.setProperty("--hh-glow-x", (nx * glowStrength).toFixed(2) + "px");
+    s.setProperty("--hh-glow-y", (ny * glowStrength).toFixed(2) + "px");
+
+    let px = curX, py = curY;
+    for (let i = 0; i < trail.length; i++) {
+      const p = trail[i];
+      const speed = i === 0 ? 0.30 : 0.20;
+      p.x += (px - p.x) * speed;
+      p.y += (py - p.y) * speed;
+      const scale = 1 - (i / trailCount) * 0.7;
+      p.el.style.left = p.x.toFixed(1) + "px";
+      p.el.style.top = p.y.toFixed(1) + "px";
+      p.el.style.transform = "translate(-50%, -50%) scale(" + scale.toFixed(2) + ")";
+      p.el.style.opacity = (1 - (i / trailCount) * 0.75).toFixed(2);
+      px = p.x; py = p.y;
+    }
+
+    // Stop looping once everything has settled and the trail is hidden
+    const settled = Math.abs(targetX - curX) < 0.2 && Math.abs(targetY - curY) < 0.2;
+    if (settled && !bg.classList.contains("hh-active")) { running = false; return; }
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    rafId = requestAnimationFrame(frame);
+  }
+  function stop() { running = false; cancelAnimationFrame(rafId); }
+
+  // Only animate while the hero is actually on screen
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (!en.isIntersecting) stop(); });
+    }, { threshold: 0 }).observe(hero);
+  }
+  window.addEventListener("resize", () => {
+    targetX = hero.clientWidth / 2; targetY = hero.clientHeight / 2;
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initHeroBackground);
