@@ -19,41 +19,43 @@
     let raf = 0;
     let lastDraw = 0;
 
-    function resize() {
-      function resize() {
+    
+function resize() {
   const rect = root.getBoundingClientRect();
 
+  // The screen may still be hidden during initialization.
   if (rect.width === 0 || rect.height === 0) {
     stop();
     return;
   }
 
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const rect = root.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
-      width = rect.width;
-      height = rect.height;
+  width = rect.width;
+  height = rect.height;
 
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const role = root.dataset.bgRole;
-      const density = mobile.matches ? 19000 : 12000;
-      const limit = role === "admin" ? 62 : role === "owner" ? 50 : 70;
-      const count = Math.min(limit, Math.max(18, Math.floor(width * height / density)));
+  const role = root.dataset.bgRole;
+  const density = mobile.matches ? 19000 : 12000;
+  const limit = role === "admin" ? 62 : role === "owner" ? 50 : 70;
+  const count = Math.min(
+    limit,
+    Math.max(18, Math.floor(width * height / density))
+  );
 
-      particles = Array.from({ length: count }, () => ({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.35,
-        vy: (Math.random() - 0.5) * 0.35,
-        r: Math.random() * 1.6 + 0.7
-      }));
+  particles = Array.from({ length: count }, () => ({
+    x: Math.random() * width,
+    y: Math.random() * height,
+    vx: (Math.random() - 0.5) * 0.35,
+    vy: (Math.random() - 0.5) * 0.35,
+    r: Math.random() * 1.6 + 0.7
+  }));
 
-      draw(performance.now(), true);
-    }
+  draw(performance.now(), true);
+}
 
     function draw(time, staticFrame = false) {
       const accent = getComputedStyle(root)
@@ -144,12 +146,17 @@
       else start();
     });
 
-    window.addEventListener("resize", resize, { passive: true });
-    const resizeObserver = new ResizeObserver(() => {
-  if (root.getBoundingClientRect().width > 0 &&
-      root.getBoundingClientRect().height > 0) {
+    
+window.addEventListener("resize", resize, { passive: true });
+
+const resizeObserver = new ResizeObserver(() => {
+  const rect = root.getBoundingClientRect();
+
+  if (rect.width > 0 && rect.height > 0) {
     resize();
     start();
+  } else {
+    stop();
   }
 });
 
