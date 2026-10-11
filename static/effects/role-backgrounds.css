@@ -219,3 +219,50 @@ body.light-theme #mainApp[data-bg-role="admin"] {
   }
 }
 
+/* Stronger role identities — dark theme */
+#authScreen[data-bg-role="student"] .role-bg,
+#mainApp[data-bg-role="student"] .role-bg {
+  background:
+    radial-gradient(ellipse at 18% 24%, rgba(52, 190, 255, .22), transparent 48%),
+    linear-gradient(145deg, #071626, #102c46 58%, #091321);
+}
+
+#authScreen[data-bg-role="owner"] .role-bg,
+#mainApp[data-bg-role="owner"] .role-bg {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 79px, rgba(170, 135, 255, .09) 80px),
+    radial-gradient(ellipse at 75% 25%, rgba(170, 135, 255, .22), transparent 48%),
+    linear-gradient(145deg, #171127, #252044 58%, #101426);
+}
+
+#authScreen[data-bg-role="admin"] .role-bg,
+#mainApp[data-bg-role="admin"] .role-bg {
+  background:
+    radial-gradient(circle at 78% 30%, rgba(255, 183, 85, .18), transparent 28%),
+    repeating-linear-gradient(0deg, transparent 0 35px, rgba(255, 183, 85, .07) 36px),
+    repeating-linear-gradient(90deg, transparent 0 35px, rgba(255, 183, 85, .07) 36px),
+    linear-gradient(145deg, #19150e, #242017 60%, #10131c);
+}
+
+/* Keep role identities in light theme too */
+body.light-theme #authScreen[data-bg-role="student"] .role-bg,
+body.light-theme #mainApp[data-bg-role="student"] .role-bg {
+  background: radial-gradient(ellipse at 18% 24%, rgba(14, 116, 190, .17), transparent 48%),
+    linear-gradient(145deg, #f4faff, #e5f1fb 58%, #f8fafc);
+}
+
+body.light-theme #authScreen[data-bg-role="owner"] .role-bg,
+body.light-theme #mainApp[data-bg-role="owner"] .role-bg {
+  background: repeating-linear-gradient(90deg, transparent 0 79px, rgba(124, 82, 210, .08) 80px),
+    radial-gradient(ellipse at 75% 25%, rgba(124, 82, 210, .15), transparent 48%),
+    linear-gradient(145deg, #faf7ff, #eee8fc 58%, #f8fafc);
+}
+
+body.light-theme #authScreen[data-bg-role="admin"] .role-bg,
+body.light-theme #mainApp[data-bg-role="admin"] .role-bg {
+  background: radial-gradient(circle at 78% 30%, rgba(190, 112, 18, .14), transparent 28%),
+    repeating-linear-gradient(0deg, transparent 0 35px, rgba(190, 112, 18, .07) 36px),
+    repeating-linear-gradient(90deg, transparent 0 35px, rgba(190, 112, 18, .07) 36px),
+    linear-gradient(145deg, #fffaf0, #f6efdf 60%, #f8fafc);
+}
+
