@@ -954,10 +954,27 @@ body.light-theme .hh-bg {
 }
 
 .hh-glow {
-  position: absolute; width: 500px; height: 500px; left: 50%; top: 50%;
-  margin: -250px 0 0 -250px; border-radius: 50%; z-index: 1;
-  background: radial-gradient(circle, rgba(var(--hh-accent-rgb), 0.14), transparent 70%);
-  transform: translate3d(var(--hh-glow-x, 0px), var(--hh-glow-y, 0px), 0);
+  position: absolute;
+  width: clamp(240px, 40vw, 500px);
+  aspect-ratio: 1;
+  left: 50%;
+  top: 50%;
+  margin: 0;
+  border-radius: 50%;
+  z-index: 1;
+
+  background: radial-gradient(
+    circle,
+    rgba(var(--hh-accent-rgb), 0.14),
+    transparent 70%
+  );
+
+  transform: translate3d(
+    calc(-50% + var(--hh-glow-x, 0px)),
+    calc(-50% + var(--hh-glow-y, 0px)),
+    0
+  );
+
   transition: transform 0.25s ease-out;
 }
 .hh-vignette {
@@ -1011,12 +1028,12 @@ body.light-theme .hh-vignette {
 .hh-bg:not(.hh-active) .hh-trail { visibility: hidden; }
 
 @media (max-width: 700px) {
-  .hh-glow { width: 300px; height: 300px; margin: -150px 0 0 -150px; }
+  /* { width: 300px; height: 300px; margin: -150px 0 0 -150px; }*/
   .hh-trail { width: 6px; height: 6px; }
   .hh-pin { width: 9px; height: 9px; box-shadow: 0 0 0 4px rgba(var(--hh-accent-rgb), 0.12), 0 0 12px rgba(var(--hh-accent-rgb), 0.7); }
   .hh-map { transition: transform 0.2s ease-out; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hh-map, .hh-dot, .hh-pin { animation: none; }
-  .hh-map, .hh-glow { transition: none; }
+  .hh-map,  { transition: none; }
 }
