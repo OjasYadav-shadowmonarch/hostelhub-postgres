@@ -20,6 +20,15 @@
     let lastDraw = 0;
 
     function resize() {
+      function resize() {
+  const rect = root.getBoundingClientRect();
+
+  if (rect.width === 0 || rect.height === 0) {
+    stop();
+    return;
+  }
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const rect = root.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
@@ -136,6 +145,15 @@
     });
 
     window.addEventListener("resize", resize, { passive: true });
+    const resizeObserver = new ResizeObserver(() => {
+  if (root.getBoundingClientRect().width > 0 &&
+      root.getBoundingClientRect().height > 0) {
+    resize();
+    start();
+  }
+});
+
+resizeObserver.observe(root);
 
     reduceMotion.addEventListener?.("change", () => {
       stop();
