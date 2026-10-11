@@ -1035,5 +1035,6 @@ body.light-theme .hh-vignette {
 }
 @media (prefers-reduced-motion: reduce) {
   .hh-map, .hh-dot, .hh-pin { animation: none; }
-  .hh-map,  { transition: none; }
+  .hh-map, .hh-glow {
+  transition: none;
 }
