@@ -348,10 +348,6 @@
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
     }
-
-    // Shared pointer handler for mouse, pen, and touch.
- 
-
     // Shared pointer handler for mouse, pen, and touch.
     function updatePointer(event) {
       const rect = root.getBoundingClientRect();
