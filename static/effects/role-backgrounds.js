@@ -368,18 +368,20 @@ function updatePointer(event) {
   }
 }
 
-    // Mouse movement, stylus movement, and touch dragging.
-    root.addEventListener("pointermove", updatePointer, {
+    
+    // Listen on the containing screen so the background
+    // reacts without blocking clicks on buttons or form fields.
+    const interactionSurface = root.parentElement;
+
+    interactionSurface?.addEventListener("pointermove", updatePointer, {
       passive: true
     });
 
-    // Make the effect react immediately when the user taps.
-    root.addEventListener("pointerdown", updatePointer, {
+    interactionSurface?.addEventListener("pointerdown", updatePointer, {
       passive: true
     });
 
-    // Clear the active point when a mouse or pen leaves.
-    root.addEventListener(
+    interactionSurface?.addEventListener(
       "pointerleave",
       (event) => {
         if (event.pointerType !== "touch") {
