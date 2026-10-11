@@ -19,61 +19,9 @@
     let raf = 0;
     let lastDraw = 0;
 
-
-    // Shared pointer position for mouse, pen, and touch.
-    const pointer = { x: 0, y: 0, active: false };
-
-    function resize() {
-      const rect = root.getBoundingClientRect();
-
-      if (rect.width === 0 || rect.height === 0) {
-        stop();
-        return;
-      }
-
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-
-      width = rect.width;
-      height = rect.height;
-
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      const role = root.parentElement?.dataset.bgRole || "student";
-      const density = mobile.matches ? 19000 : 12000;
-      const limit =
-        role === "admin" ? 62 :
-        role === "owner" ? 50 : 70;
-
-      const count = Math.min(
-        limit,
-        Math.max(18, Math.floor((width * height) / density))
-      );
-
-      particles = Array.from({ length: count }, () => ({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.35,
-        vy: (Math.random() - 0.5) * 0.35,
-        r: Math.random() * 1.6 + 0.7
-      }));
-
-      draw(performance.now(), true);
-    }
-
-    function draw(time, staticFrame = false) {
-      const accent =
-        getComputedStyle(root)
-          .getPropertyValue("--role-accent")
-          .trim() || "52, 211, 224";
-
-      const role = root.parentElement?.dataset.bgRole || "student";
-
-      ctx.clearRect(0, 0, width, height);
-
-      // Keep the rest of your existing draw() function here.
+    
+function resize() {
+  const rect = root.getBoundingClientRect();
 
   // The screen may still be hidden during initialization.
   if (rect.width === 0 || rect.height === 0) {
@@ -333,55 +281,21 @@ function draw(time, staticFrame = false) {
       raf = 0;
     }
 
-    // Shared pointer handler for mouse, pen, and touch.
-    function updatePointer(event) {
+    root.addEventListener("pointermove", event => {
+      if (mobile.matches || reduceMotion.matches || !glow) return;
+
       const rect = root.getBoundingClientRect();
-
-      pointer.x = Math.max(0, Math.min(width, event.clientX - rect.left));
-      pointer.y = Math.max(0, Math.min(height, event.clientY - rect.top));
-      pointer.active = true;
-
-      if (glow) {
-        glow.style.setProperty("--glow-x", `${pointer.x}px`);
-        glow.style.setProperty("--glow-y", `${pointer.y}px`);
-      }
-
-      if (reduceMotion.matches) {
-        draw(0, true);
-      }
-    }
-
-    // Listen on the containing screen so the background
-    // reacts without blocking clicks on buttons or form fields.
-    const interactionSurface = root.parentElement;
-
-    interactionSurface?.addEventListener("pointermove", updatePointer, {
-      passive: true
-    });
-
-    interactionSurface?.addEventListener("pointerdown", updatePointer, {
-      passive: true
-    });
-
-    interactionSurface?.addEventListener(
-      "pointerup",
-      (event) => {
-        if (event.pointerType === "touch") {
-          pointer.active = false;
-        }
-      },
-      { passive: true }
-    );
+      glow.style.setProperty("--glow-x", `${event.clientX - rect.left}px`);
+      glow.style.setProperty("--glow-y", `${event.clientY - rect.top}px`);
+    }, { passive: true });
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) stop();
       else start();
     });
 
-    window.addEventListener("resize", resize, {
-      passive: true
-    });
-
+    
+window.addEventListener("resize", resize, { passive: true });
 
 const resizeObserver = new ResizeObserver(() => {
   const rect = root.getBoundingClientRect();
@@ -417,13 +331,3 @@ resizeObserver.observe(root);
   window.HostelHubRoleBackgrounds.setup();
 })();
 
-// Initialize role backgrounds after the document is parsed.
-if (document.readyState === "loading") {
-  document.addEventListener(
-    "DOMContentLoaded",
-    () => window.HostelHubRoleBackgrounds?.setup(),
-    { once: true }
-  );
-} else {
-  window.HostelHubRoleBackgrounds?.setup();
-}
