@@ -432,3 +432,13 @@ function updatePointer(event) {
     }
   };
 })();
+// Initialize role backgrounds after the document is parsed.
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => window.HostelHubRoleBackgrounds?.setup(),
+    { once: true }
+  );
+} else {
+  window.HostelHubRoleBackgrounds?.setup();
+}
