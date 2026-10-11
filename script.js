@@ -285,6 +285,7 @@ function showAuthScreen(portal, mode) {
   state.screen = "auth";
   state.activePortal = portal;
   state.authMode = mode;
+  $("#authScreen").dataset.bgRole = portal; 
   $("#landingScreen").hidden = true;
   $("#mainApp").hidden = true;
   $("#authScreen").hidden = false;
@@ -498,7 +499,7 @@ function enterApp() {
 
   const user = state.currentUser;
   const portal = state.guestBrowsing ? "student" : user.role;
-
+  $("#mainApp").dataset.bgRole = portal;
   $("#navLogo").textContent = PORTAL_COPY[portal].wordmark;
   $("#navRoleTag").textContent = state.guestBrowsing ? "Guest" : (user.role[0].toUpperCase() + user.role.slice(1));
 
