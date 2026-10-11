@@ -351,22 +351,24 @@
 
     // Shared pointer handler for mouse, pen, and touch.
  
-function updatePointer(event) {
-  const rect = root.getBoundingClientRect();
 
-  pointer.x = Math.max(0, Math.min(width, event.clientX - rect.left));
-  pointer.y = Math.max(0, Math.min(height, event.clientY - rect.top));
-  pointer.active = true;
+    // Shared pointer handler for mouse, pen, and touch.
+    function updatePointer(event) {
+      const rect = root.getBoundingClientRect();
 
-  if (glow) {
-    glow.style.setProperty("--glow-x", `${pointer.x}px`);
-    glow.style.setProperty("--glow-y", `${pointer.y}px`);
-  }
+      pointer.x = Math.max(0, Math.min(width, event.clientX - rect.left));
+      pointer.y = Math.max(0, Math.min(height, event.clientY - rect.top));
+      pointer.active = true;
 
-  if (reduceMotion.matches) {
-    draw(0, true);
-  }
-}
+      if (glow) {
+        glow.style.setProperty("--glow-x", `${pointer.x}px`);
+        glow.style.setProperty("--glow-y", `${pointer.y}px`);
+      }
+
+      if (reduceMotion.matches) {
+        draw(0, true);
+      }
+    }
 
     
     // Listen on the containing screen so the background
@@ -381,15 +383,16 @@ function updatePointer(event) {
       passive: true
     });
 
+
     interactionSurface?.addEventListener(
-  "pointerup",
-  (event) => {
-    if (event.pointerType === "touch") {
-      pointer.active = false;
-    }
-  },
-  { passive: true }
-);
+      "pointerup",
+      (event) => {
+        if (event.pointerType === "touch") {
+          pointer.active = false;
+        }
+      },
+      { passive: true }
+    );
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         stop();
