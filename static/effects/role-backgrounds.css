@@ -147,3 +147,75 @@
   }
 }
 
+/* LIGHT THEME — role-specific animated backgrounds */
+
+body.light-theme .role-bg {
+  background:
+    radial-gradient(
+      ellipse at 18% 18%,
+      rgba(var(--role-accent), .16),
+      transparent 52%
+    ),
+    linear-gradient(135deg, #f8fafc, #eef2f8 58%, #f7f5ef);
+}
+
+body.light-theme .role-bg-canvas {
+  opacity: .72;
+}
+
+body.light-theme .role-bg-grid {
+  opacity: .09;
+  background-image:
+    linear-gradient(
+      rgba(var(--role-accent), .20) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--role-accent), .20) 1px,
+      transparent 1px
+    );
+}
+
+body.light-theme .role-bg-glow {
+  opacity: .62;
+  background: radial-gradient(
+    circle,
+    rgba(var(--role-accent), .17),
+    rgba(var(--role-accent), .045) 45%,
+    transparent 72%
+  );
+}
+
+/* Light glass effect for the login card */
+body.light-theme .auth-card {
+  background: rgba(255, 255, 255, .91);
+  border-color: rgba(130, 145, 170, .28);
+  box-shadow: 0 18px 50px rgba(31, 41, 55, .12);
+  backdrop-filter: blur(16px);
+}
+
+/* Student — blue */
+body.light-theme #authScreen[data-bg-role="student"],
+body.light-theme #mainApp[data-bg-role="student"] {
+  --role-accent: 14, 116, 190;
+}
+
+/* Owner — purple */
+body.light-theme #authScreen[data-bg-role="owner"],
+body.light-theme #mainApp[data-bg-role="owner"] {
+  --role-accent: 124, 82, 210;
+}
+
+/* Admin — amber */
+body.light-theme #authScreen[data-bg-role="admin"],
+body.light-theme #mainApp[data-bg-role="admin"] {
+  --role-accent: 190, 112, 18;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.light-theme .role-bg-canvas {
+    opacity: .55;
+  }
+}
+
