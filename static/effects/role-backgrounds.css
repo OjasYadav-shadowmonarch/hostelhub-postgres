@@ -1,0 +1,149 @@
+
+/* HostelHub: role-specific background system */
+
+.role-bg {
+  --role-accent: 52, 211, 224;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse at 20% 20%,
+      rgba(var(--role-accent), .18),
+      transparent 48%
+    ),
+    linear-gradient(135deg, #070d1b, #121d34);
+}
+
+.role-bg-canvas,
+.role-bg-glow,
+.role-bg-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.role-bg-canvas {
+  display: block;
+}
+
+.role-bg-glow {
+  inset: auto;
+  width: 460px;
+  height: 460px;
+  margin: -230px 0 0 -230px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(var(--role-accent), .2),
+    rgba(var(--role-accent), .05) 45%,
+    transparent 72%
+  );
+  transform: translate3d(
+    var(--glow-x, 65vw),
+    var(--glow-y, 25vh),
+    0
+  );
+  filter: blur(15px);
+}
+
+.role-bg-grid {
+  opacity: .15;
+  background-image:
+    linear-gradient(rgba(var(--role-accent), .18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--role-accent), .18) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Keep the UI above the animated layer. */
+#authScreen,
+#mainApp {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Keep the role background behind the interface. */
+#authScreen > :not(.role-bg),
+#mainApp > :not(.role-bg) {
+  z-index: 1;
+}
+
+/* Preserve the existing positioning of individual elements. */
+#authScreen .auth-orb {
+  position: absolute;
+  z-index: 1;
+}
+
+#mainApp > .navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+#mainApp > .view-root {
+  position: relative;
+  z-index: 1;
+}
+
+/* The existing auth card should remain readable. */
+.auth-card {
+  position: relative;
+  z-index: 2;
+  background: rgba(19, 26, 48, .88);
+  backdrop-filter: blur(12px);
+}
+
+/* STUDENT: campus exploration */
+#authScreen[data-bg-role="student"],
+#mainApp[data-bg-role="student"] {
+  --role-accent: 52, 190, 255;
+}
+
+/* OWNER: architecture and property */
+#authScreen[data-bg-role="owner"],
+#mainApp[data-bg-role="owner"] {
+  --role-accent: 170, 135, 255;
+}
+
+#authScreen[data-bg-role="owner"] .role-bg-grid,
+#mainApp[data-bg-role="owner"] .role-bg-grid {
+  background-size: 72px 72px;
+  transform: perspective(600px) rotateX(8deg) scale(1.1);
+}
+
+/* ADMIN: control center */
+#authScreen[data-bg-role="admin"],
+#mainApp[data-bg-role="admin"] {
+  --role-accent: 255, 183, 85;
+}
+
+#authScreen[data-bg-role="admin"] .role-bg-grid,
+#mainApp[data-bg-role="admin"] .role-bg-grid {
+  background-size: 36px 36px;
+  opacity: .2;
+}
+
+/* Avoid heavy animation on small devices. */
+@media (max-width: 700px) {
+  .role-bg-grid {
+    background-size: 40px 40px;
+  }
+
+  .role-bg-glow {
+    width: 300px;
+    height: 300px;
+    margin: -150px 0 0 -150px;
+    filter: blur(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .role-bg-glow {
+    transform: none;
+    filter: none;
+  }
+}
+

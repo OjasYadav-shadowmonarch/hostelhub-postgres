@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="/static/effects/role-backgrounds.css" />
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet"/>
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 </head>
@@ -245,13 +246,24 @@
 
 <!-- =================== AUTH SCREEN (student / owner — portal-aware; admin signs in through either with its own credentials) =================== -->
 <div id="authScreen" class="auth-screen" hidden>
-  <div class="auth-orb orb-1"></div>
+  <div class="auth-orb orb-1">
+</div>
+  <div class="role-bg" aria-hidden="true">
+  <canvas class="role-bg-canvas"></canvas>
+  <div class="role-bg-glow"></div>
+  <div class="role-bg-grid"></div>
+</div>
   <div class="auth-orb orb-2"></div>
   <div id="authCardContainer"></div>
 </div>
 
 <!-- =================== MAIN APP =================== -->
 <div id="mainApp" class="main-app" hidden>
+  <div class="role-bg" aria-hidden="true">
+  <canvas class="role-bg-canvas"></canvas>
+  <div class="role-bg-glow"></div>
+  <div class="role-bg-grid"></div>
+</div>
   <header class="navbar">
     <div class="nav-left">
       <span class="nav-logo" id="navLogo">🏠 HostelHub</span>
@@ -273,5 +285,6 @@
 <input type="file" id="listingImageFile" accept="image/*" hidden />
 
 <script src="script.js"></script>
+<script src="/static/effects/role-backgrounds.js" defer></script>
 </body>
 </html>
