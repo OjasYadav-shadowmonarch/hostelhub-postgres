@@ -245,13 +245,24 @@
 
 <!-- =================== AUTH SCREEN (student / owner — portal-aware; admin signs in through either with its own credentials) =================== -->
 <div id="authScreen" class="auth-screen" hidden>
-  <div class="auth-orb orb-1"></div>
+  <div class="auth-orb orb-1">
+</div>
+  <div class="role-bg" aria-hidden="true">
+  <canvas class="role-bg-canvas"></canvas>
+  <div class="role-bg-glow"></div>
+  <div class="role-bg-grid"></div>
+</div>
   <div class="auth-orb orb-2"></div>
   <div id="authCardContainer"></div>
 </div>
 
 <!-- =================== MAIN APP =================== -->
 <div id="mainApp" class="main-app" hidden>
+  <div class="role-bg" aria-hidden="true">
+  <canvas class="role-bg-canvas"></canvas>
+  <div class="role-bg-glow"></div>
+  <div class="role-bg-grid"></div>
+</div>
   <header class="navbar">
     <div class="nav-left">
       <span class="nav-logo" id="navLogo">🏠 HostelHub</span>
