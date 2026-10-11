@@ -350,32 +350,24 @@
     }
 
     // Shared pointer handler for mouse, pen, and touch.
-    function updatePointer(event) {
+ 
+function updatePointer(event) {
   const rect = root.getBoundingClientRect();
 
-  pointer.x = Math.max(
-    0,
-    Math.min(width, event.clientX - rect.left)
-  );
-
-  pointer.y = Math.max(
-    0,
-    Math.min(height, event.clientY - rect.top)
-  );
-
+  pointer.x = Math.max(0, Math.min(width, event.clientX - rect.left));
+  pointer.y = Math.max(0, Math.min(height, event.clientY - rect.top));
   pointer.active = true;
 
-  // Move the glow if it exists.
   if (glow) {
     glow.style.setProperty("--glow-x", `${pointer.x}px`);
     glow.style.setProperty("--glow-y", `${pointer.y}px`);
   }
 
-  // Refresh the canvas for users who prefer reduced motion.
   if (reduceMotion.matches) {
     draw(0, true);
   }
 }
+
     // Mouse movement, stylus movement, and touch dragging.
     root.addEventListener("pointermove", updatePointer, {
       passive: true
