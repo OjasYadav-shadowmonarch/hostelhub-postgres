@@ -142,9 +142,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .role-bg-glow {
+    transform: none;
     filter: none;
   }
 }
+
 /* LIGHT THEME — role-specific animated backgrounds */
 
 body.light-theme .role-bg {
