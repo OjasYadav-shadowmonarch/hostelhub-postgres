@@ -39,7 +39,7 @@
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const role = root.dataset.bgRole;
+      const role = root.parentElement?.dataset.bgRole || "student";
       const density = mobile.matches ? 19000 : 12000;
       const limit =
         role === "admin" ? 62 :
@@ -67,7 +67,7 @@
           .getPropertyValue("--role-accent")
           .trim() || "52, 211, 224";
 
-      const role = root.dataset.bgRole || "student";
+      const role = root.parentElement?.dataset.bgRole || "student";
 
       ctx.clearRect(0, 0, width, height);
 
