@@ -365,8 +365,6 @@
         draw(0, true);
       }
     }
-
-    
     // Listen on the containing screen so the background
     // reacts without blocking clicks on buttons or form fields.
     const interactionSurface = root.parentElement;
@@ -378,8 +376,6 @@
     interactionSurface?.addEventListener("pointerdown", updatePointer, {
       passive: true
     });
-
-
     interactionSurface?.addEventListener(
       "pointerup",
       (event) => {
@@ -389,6 +385,7 @@
       },
       { passive: true }
     );
+    
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         stop();
@@ -396,7 +393,6 @@
         start();
       }
     });
-
     window.addEventListener("resize", resize, {
       passive: true
     });
