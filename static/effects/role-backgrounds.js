@@ -382,15 +382,14 @@ function updatePointer(event) {
     });
 
     interactionSurface?.addEventListener(
-      "pointerleave",
-      (event) => {
-        if (event.pointerType !== "touch") {
-          pointer.active = false;
-        }
-      },
-      { passive: true }
-    );
-
+  "pointerup",
+  (event) => {
+    if (event.pointerType === "touch") {
+      pointer.active = false;
+    }
+  },
+  { passive: true }
+);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         stop();
