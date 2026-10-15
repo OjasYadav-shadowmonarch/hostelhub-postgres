@@ -46,6 +46,55 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PHONE_RE = re.compile(r"^\d{10}$")
 
+def send_resend_email(to_email, subject, html):
+    """Send a transactional email through Resend.
+
+    Returns True when Resend accepts the request, otherwise False.
+    Never logs the API key or email body.
+    """
+    api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "").strip()
+
+    if not api_key or not from_email:
+        app.logger.error(
+            "Email sending is not configured: missing Resend settings."
+        )
+        return False
+
+    payload = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+    }
+
+    try:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=10,
+        )
+
+        if not response.ok:
+            app.logger.error(
+                "Resend rejected an email request (HTTP %s).",
+                response.status_code,
+            )
+            return False
+
+        return True
+
+    except requests.RequestException as exc:
+        app.logger.error(
+            "Email request failed (%s).",
+            type(exc).__name__,
+        )
+        return False
+
 
 def env_bool(name, default=False):
     val = os.environ.get(name)
