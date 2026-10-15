@@ -180,6 +180,19 @@ CREATE TABLE IF NOT EXISTS users (
 
 );
 
+-- Add verification fields to existing databases safely.
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE users
+    ALTER COLUMN email_verified SET DEFAULT FALSE;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS hostels (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
