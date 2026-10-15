@@ -665,8 +665,6 @@ def api_login():
     session["user_id"] = row["id"]
     return jsonify({"user": user_public(row)})
 
-
-
 @app.post("/api/auth/signup")
 def api_signup():
     data = request.get_json(silent=True) or {}
@@ -685,11 +683,11 @@ def api_signup():
         else "invalid"
     )
 
-    if not name or not username or not email or not phone or not password or not confirm:
+    if not all([name, username, email, phone, password, confirm]):
         return error("Please fill in all required fields.")
 
     if not EMAIL_RE.match(email):
-        return error("Please enter a valid email address (e.g. name@example.com).")
+        return error("Please enter a valid email address.")
 
     if not PHONE_RE.match(phone):
         return error(
@@ -719,12 +717,23 @@ def api_signup():
     if existing:
         return error("That username is already taken.")
 
+    # Generate a secure token; store only its SHA-256 hash.
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    expires_at = datetime.now().astimezone() + timedelta(hours=24)
+
     try:
         cur = db.execute(
-            "INSERT INTO users "
-            "(name, username, email, phone, role, joined, status, password_hash) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
-            "RETURNING id",
+            """
+            INSERT INTO users (
+                name, username, email, phone, role, joined, status,
+                password_hash, email_verified,
+                email_verification_token_hash,
+                email_verification_expires_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s)
+            RETURNING id
+            """,
             (
                 name,
                 username,
@@ -734,6 +743,8 @@ def api_signup():
                 date.today().isoformat(),
                 "active",
                 generate_password_hash(password),
+                token_hash,
+                expires_at,
             ),
         )
     except pg_errors.UniqueViolation:
@@ -743,14 +754,65 @@ def api_signup():
     new_id = cur.fetchone()["id"]
     db.commit()
 
-    row = db.execute(
-        "SELECT * FROM users WHERE id=%s",
-        (new_id,),
-    ).fetchone()
+    base_url = os.environ.get(
+        "APP_BASE_URL", ""
+    ).strip().rstrip("/")
 
-    session["user_id"] = row["id"]
+    if not base_url:
+        app.logger.error(
+            "APP_BASE_URL is missing; verification email cannot be sent."
+        )
+        return jsonify({
+            "message": (
+                "Your account was created, but the verification email "
+                "could not be sent. Please contact support."
+            )
+        }), 201
 
-    return jsonify({"user": user_public(row)}), 201
+    verification_url = (
+        f"{base_url}/api/auth/verify-email?"
+        f"{urlencode({'token': raw_token})}"
+    )
+
+    safe_name = escape(name)
+    safe_url = escape(verification_url, quote=True)
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+      <h2>Welcome to HostelHub</h2>
+      <p>Hello {safe_name},</p>
+      <p>Please verify your email address to activate your account.</p>
+      <p>
+        <a href="{safe_url}"
+           style="display:inline-block;padding:12px 20px;
+                  background:#2563eb;color:#ffffff;
+                  text-decoration:none;border-radius:6px">
+          Verify email address
+        </a>
+      </p>
+      <p>This link expires in 24 hours and can only be used once.</p>
+      <p>If you did not create this account, you can ignore this email.</p>
+    </div>
+    """
+
+    sent = send_resend_email(
+        email,
+        "Verify your HostelHub email address",
+        html,
+    )
+
+    if not sent:
+        app.logger.warning(
+            "Verification email could not be sent for new user ID %s.",
+            new_id,
+        )
+
+    return jsonify({
+        "message": (
+            "Your account has been created. "
+            "Check your email for a verification link."
+        )
+    }), 201
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
