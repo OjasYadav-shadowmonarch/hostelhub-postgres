@@ -1233,10 +1233,9 @@ def api_approve_hostel(hostel_id):
 
     # Notify the owner only when the listing first becomes live.
     was_live = (
-        h.get("live") is True
-        and h.get("status") == "verified"
-    )
-
+    bool(h["live"])
+    and h["status"] == "verified"
+)
     owner = db.execute(
         "SELECT name, email FROM users WHERE id = %s",
         (h["owner_id"],),
