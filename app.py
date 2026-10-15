@@ -620,9 +620,9 @@ def api_me():
 # ---------------------------------------------------------------- #
 
 @app.post("/api/auth/login")
-
 def api_login():
     data = request.get_json(silent=True) or {}
+
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     portal = data.get("portal") or None
@@ -631,6 +631,7 @@ def api_login():
         return error("Please enter both username and password.")
 
     db = get_db()
+
     row = db.execute(
         "SELECT * FROM users WHERE lower(username)=lower(%s)",
         (username,)
@@ -643,15 +644,20 @@ def api_login():
         return error("Incorrect password.")
 
     if row["status"] == "inactive":
-        return error("This account has been deactivated. Contact an administrator.")
-    # Require verified email for student and owner accounts.
-    # The configured administrator retains the existing login behavior.
+        return error(
+            "This account has been deactivated. Contact an administrator."
+        )
+
+    # Only the administrator configured on the server
+    # can bypass the portal-role match check.
     is_configured_admin = (
         bool(ADMIN_USERNAME)
         and row["role"] == "admin"
         and row["username"].lower() == ADMIN_USERNAME.lower()
     )
 
+    # Student and owner accounts must verify their email first.
+    # Configured administrator authentication remains unchanged.
     if (
         row["role"] in ("student", "owner")
         and not row["email_verified"]
@@ -661,17 +667,14 @@ def api_login():
             403
         )
 
-    # Only the administrator configured in the server environment
-    # may bypass the portal-role match check.
-    is_configured_admin = (
-        bool(ADMIN_USERNAME)
-        and row["role"] == "admin"
-        and row["username"].lower() == ADMIN_USERNAME.lower()
-    )
-
+    # Reject administrator accounts not configured on the server.
     if row["role"] == "admin" and not is_configured_admin:
-        return error("This administrator account is not authorized.", 403)
+        return error(
+            "This administrator account is not authorized.",
+            403
+        )
 
+    # Preserve the existing portal-role validation.
     if portal and not is_configured_admin and row["role"] != portal:
         return error(
             f"This account is registered as {row['role']}, not {portal}.",
@@ -679,8 +682,9 @@ def api_login():
         )
 
     session["user_id"] = row["id"]
-    return jsonify({"user": user_public(row)})
 
+    return jsonify({"user": user_public(row)})
+  
 @app.post("/api/auth/signup")
 def api_signup():
     data = request.get_json(silent=True) or {}
