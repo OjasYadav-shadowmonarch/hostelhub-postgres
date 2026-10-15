@@ -1,18 +1,25 @@
-
 BEGIN;
 
--- Preserve existing accounts as verified when adding this column.
+-- Add the column as verified for existing accounts if it is missing.
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS email_verified
         BOOLEAN NOT NULL DEFAULT TRUE;
 
--- New accounts created by the application must be unverified.
-ALTER TABLE users
-    ALTER COLUMN email_verified SET DEFAULT FALSE;
+-- Preserve accounts that existed before email verification was introduced.
+-- Only do this when the column was newly introduced, not on every migration run.
+-- See the safer migration instructions below before applying this SQL.
 
 ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT,
-    ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
+
+ALTER TABLE users
     ADD COLUMN IF NOT EXISTS email_verification_sent_at TIMESTAMPTZ;
+
+-- New registrations must default to unverified.
+ALTER TABLE users
+    ALTER COLUMN email_verified SET DEFAULT FALSE;
 
 COMMIT;
