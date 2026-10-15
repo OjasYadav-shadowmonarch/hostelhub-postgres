@@ -1218,18 +1218,82 @@ def api_toggle_availability(hostel_id):
     return jsonify({"hostel": hostel_public(hostel_or_404(db, hostel_id))})
 
 
+
 @app.post("/api/hostels/<int:hostel_id>/approve")
 def api_approve_hostel(hostel_id):
     _, err = require_role("admin")
     if err:
         return err
+
     db = get_db()
     h = hostel_or_404(db, hostel_id)
+
     if not h:
         return error("Listing not found.", 404)
-    db.execute("UPDATE hostels SET status='verified', live=TRUE WHERE id=%s", (hostel_id,))
+
+    # Notify the owner only when the listing first becomes live.
+    was_live = (
+        h.get("live") is True
+        and h.get("status") == "verified"
+    )
+
+    owner = db.execute(
+        "SELECT name, email FROM users WHERE id = %s",
+        (h["owner_id"],),
+    ).fetchone()
+
+    db.execute(
+        """
+        UPDATE hostels
+        SET status = 'verified', live = TRUE
+        WHERE id = %s
+        """,
+        (hostel_id,),
+    )
     db.commit()
-    return jsonify({"hostel": hostel_public(hostel_or_404(db, hostel_id))})
+
+    # Email failure must not undo a successful approval.
+    if not was_live and owner and owner["email"]:
+        safe_name = escape(owner["name"] or "there")
+        safe_hostel_name = escape(h.get("name") or "your listing")
+
+        app_base_url = os.environ.get(
+            "APP_BASE_URL", ""
+        ).strip().rstrip("/")
+
+        listing_link = (
+            f"{app_base_url}/"
+            if app_base_url
+            else ""
+        )
+
+        link_html = (
+            f'<p><a href="{escape(listing_link, quote=True)}">'
+            "Visit HostelHub</a> to manage your listing.</p>"
+            if listing_link
+            else ""
+        )
+
+        email_html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+          <h2>Your HostelHub listing is live!</h2>
+          <p>Hello {safe_name},</p>
+          <p>Your listing <strong>{safe_hostel_name}</strong>
+          has been approved by the administrator and is now live.</p>
+          {link_html}
+          <p>Thank you for using HostelHub.</p>
+        </div>
+        """
+
+        send_resend_email(
+            owner["email"],
+            "Your HostelHub listing is now live",
+            email_html,
+        )
+
+    return jsonify({
+        "hostel": hostel_public(hostel_or_404(db, hostel_id))
+    })
 
 
 @app.post("/api/hostels/<int:hostel_id>/reject")
