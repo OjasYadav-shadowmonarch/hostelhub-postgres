@@ -1024,11 +1024,13 @@ def api_logout():
     return jsonify({"ok": True})
 
 
+
 @app.put("/api/auth/profile")
 def api_update_profile():
     user, err = require_login()
     if err:
         return err
+
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     email = (data.get("email") or "").strip()
@@ -1036,15 +1038,38 @@ def api_update_profile():
 
     if not name or not email or not phone:
         return error("Name, email and phone are required.")
+
     if not EMAIL_RE.match(email):
-        return error("Please enter a valid email address (e.g. name@example.com).")
+        return error(
+            "Please enter a valid email address (e.g. name@example.com)."
+        )
+
     if not PHONE_RE.match(phone):
-        return error("Phone number must be exactly 10 digits, with no letters or symbols.")
+        return error(
+            "Phone number must be exactly 10 digits, "
+            "with no letters or symbols."
+        )
+
+    current_email = (user.get("email") or "").strip()
+
+    if email.lower() != current_email.lower():
+        return error(
+            "Email changes are temporarily unavailable. "
+            "Your email must be verified before it can be changed."
+        )
 
     db = get_db()
-    db.execute("UPDATE users SET name=%s, email=%s, phone=%s WHERE id=%s", (name, email, phone, user["id"]))
+    db.execute(
+        "UPDATE users SET name=%s, phone=%s WHERE id=%s",
+        (name, phone, user["id"]),
+    )
     db.commit()
-    row = db.execute("SELECT * FROM users WHERE id=%s", (user["id"],)).fetchone()
+
+    row = db.execute(
+        "SELECT * FROM users WHERE id=%s",
+        (user["id"],),
+    ).fetchone()
+
     return jsonify({"user": user_public(row)})
 
 
