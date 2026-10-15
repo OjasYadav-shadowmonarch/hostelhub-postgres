@@ -396,14 +396,6 @@ async function handleLogin() {
     return;
   }
 
-  await refreshState();
-  state.currentUser = data.user;
-  state.guestBrowsing = false;
-  enterApp();
-  if (state.pendingContactHostelId) resumeAfterAuth();
-}
-
-
 async function handleSignup() {
   const name = $("#signupName").value.trim();
   const username = $("#signupUsername").value.trim();
