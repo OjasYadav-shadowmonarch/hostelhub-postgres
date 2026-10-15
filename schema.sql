@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS users (
     joined DATE NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     password_hash TEXT NOT NULL
+    
+    email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    email_verification_token_hash TEXT,
+    email_verification_expires_at TIMESTAMPTZ
+
 );
 
 CREATE TABLE IF NOT EXISTS hostels (
