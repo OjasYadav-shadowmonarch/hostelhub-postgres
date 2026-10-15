@@ -732,13 +732,22 @@ def api_signup():
 
     db = get_db()
 
-    existing = db.execute(
-        "SELECT id FROM users WHERE lower(username)=lower(%s)",
-        (username,),
-    ).fetchone()
+    
+existing_email = db.execute(
+    "SELECT id FROM users WHERE lower(email)=lower(%s) LIMIT 1",
+    (email,),
+).fetchone()
 
-    if existing:
-        return error("That username is already taken.")
+if existing_email:
+    return error("That email address is already registered.")
+
+existing = db.execute(
+    "SELECT id FROM users WHERE lower(username)=lower(%s) LIMIT 1",
+    (username,),
+).fetchone()
+
+if existing:
+    return error("That username is already taken.")
 
     # Generate a secure token; store only its SHA-256 hash.
     raw_token = secrets.token_urlsafe(32)
