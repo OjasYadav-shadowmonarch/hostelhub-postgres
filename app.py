@@ -644,6 +644,22 @@ def api_login():
 
     if row["status"] == "inactive":
         return error("This account has been deactivated. Contact an administrator.")
+    # Require verified email for student and owner accounts.
+    # The configured administrator retains the existing login behavior.
+    is_configured_admin = (
+        bool(ADMIN_USERNAME)
+        and row["role"] == "admin"
+        and row["username"].lower() == ADMIN_USERNAME.lower()
+    )
+
+    if (
+        row["role"] in ("student", "owner")
+        and not row["email_verified"]
+    ):
+        return error(
+            "Please verify your email address before logging in.",
+            403
+        )
 
     # Only the administrator configured in the server environment
     # may bypass the portal-role match check.
