@@ -833,6 +833,79 @@ def api_signup():
             "Check your email for a verification link."
         )
     }), 201
+    
+@app.get("/api/auth/verify-email")
+def api_verify_email():
+    token = (request.args.get("token") or "").strip()
+
+    if not token:
+        return error("Verification token is missing.", 400)
+
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    db = get_db()
+
+    row = db.execute(
+        """
+        SELECT id, name, email, email_verified,
+               email_verification_expires_at
+        FROM users
+        WHERE email_verification_token_hash = %s
+        """,
+        (token_hash,),
+    ).fetchone()
+
+    if not row:
+        return error(
+            "This verification link is invalid or has already been used.",
+            400,
+        )
+
+    if row["email_verified"]:
+        return error("This email address is already verified.", 400)
+
+    expires_at = row["email_verification_expires_at"]
+
+    if not expires_at or expires_at <= datetime.now().astimezone():
+        return error(
+            "This verification link has expired. Request a new one.",
+            400,
+        )
+
+    db.execute(
+        """
+        UPDATE users
+        SET email_verified = TRUE,
+            email_verification_token_hash = NULL,
+            email_verification_expires_at = NULL
+        WHERE id = %s
+        """,
+        (row["id"],),
+    )
+    db.commit()
+
+    safe_name = escape(row["name"])
+    welcome_html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+      <h2>Welcome to HostelHub!</h2>
+      <p>Hello {safe_name},</p>
+      <p>Your email address has been verified successfully.</p>
+      <p>You can now log in to your HostelHub account.</p>
+      <p>Thank you for joining HostelHub.</p>
+    </div>
+    """
+
+    send_resend_email(
+        row["email"],
+        "Welcome to HostelHub",
+        welcome_html,
+    )
+
+    return jsonify({
+        "message": (
+            "Your email has been verified successfully. "
+            "You can now log in to HostelHub."
+        )
+    })    
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
