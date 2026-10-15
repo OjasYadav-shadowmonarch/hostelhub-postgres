@@ -474,16 +474,6 @@ async function handleSignup() {
   }
 }
 
-
-  await refreshState();
-  state.currentUser = data.user;
-  state.guestBrowsing = false;
-  const hadPendingContact = !!state.pendingContactHostelId;
-  if (!hadPendingContact) showToast(`Welcome to HostelHub, ${name.split(" ")[0]}!`, "success");
-  enterApp();
-  if (hadPendingContact) resumeAfterAuth();
-}
-
 function switchPortal(role) {
   showAuthScreen(role, "login");
 }
