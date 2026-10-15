@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     email_verification_token_hash TEXT,
-    email_verification_expires_at TIMESTAMPTZ
+    email_verification_expires_at TIMESTAMPTZ,
+    email_verification_sent_at TIMESTAMPTZ
 
 );
 
