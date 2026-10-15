@@ -752,9 +752,10 @@ def api_signup():
                 name, username, email, phone, role, joined, status,
                 password_hash, email_verified,
                 email_verification_token_hash,
-                email_verification_expires_at
+                email_verification_expires_at,
+                email_verification_sent_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s,NOW())
             RETURNING id
             """,
             (
@@ -908,7 +909,115 @@ def api_verify_email():
             "Your email has been verified successfully. "
             "You can now log in to HostelHub."
         )
-    })    
+    })
+
+@app.post("/api/auth/resend-verification")
+def api_resend_verification():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+
+    if not email or not EMAIL_RE.match(email):
+        return error("Please enter a valid email address.")
+
+    generic_message = (
+        "If an unverified account exists for that email, "
+        "a verification link will be sent when eligible."
+    )
+
+    db = get_db()
+
+    row = db.execute(
+        """
+        SELECT id, name, email, email_verified,
+               email_verification_sent_at
+        FROM users
+        WHERE lower(email) = lower(%s)
+          AND role IN ('student', 'owner')
+        LIMIT 1
+        """,
+        (email,),
+    ).fetchone()
+
+    # Use the same response whether the account exists or not.
+    if not row or row["email_verified"]:
+        return jsonify({"message": generic_message})
+
+    sent_at = row["email_verification_sent_at"]
+    now = datetime.now().astimezone()
+
+    # Allow at most one verification email request per 60 seconds.
+    if sent_at and now - sent_at < timedelta(seconds=60):
+        return jsonify({"message": generic_message})
+
+    base_url = os.environ.get(
+        "APP_BASE_URL", ""
+    ).strip().rstrip("/")
+
+    if not base_url:
+        app.logger.error(
+            "APP_BASE_URL is missing; verification email cannot be sent."
+        )
+        return jsonify({"message": generic_message})
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(
+        raw_token.encode("utf-8")
+    ).hexdigest()
+    expires_at = now + timedelta(hours=24)
+
+    db.execute(
+        """
+        UPDATE users
+        SET email_verification_token_hash = %s,
+            email_verification_expires_at = %s,
+            email_verification_sent_at = NOW()
+        WHERE id = %s
+          AND email_verified = FALSE
+        """,
+        (token_hash, expires_at, row["id"]),
+    )
+    db.commit()
+
+    verification_url = (
+        f"{base_url}/api/auth/verify-email?"
+        f"{urlencode({'token': raw_token})}"
+    )
+
+    safe_name = escape(row["name"])
+    safe_url = escape(verification_url, quote=True)
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+      <h2>Verify your HostelHub email</h2>
+      <p>Hello {safe_name},</p>
+      <p>Use the button below to verify your email address.</p>
+      <p>
+        <a href="{safe_url}"
+           style="display:inline-block;padding:12px 20px;
+                  background:#2563eb;color:#ffffff;
+                  text-decoration:none;border-radius:6px">
+          Verify email address
+        </a>
+      </p>
+      <p>This link expires in 24 hours and can only be used once.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    </div>
+    """
+
+    sent = send_resend_email(
+        row["email"],
+        "Your HostelHub verification link",
+        html,
+    )
+
+    if not sent:
+        app.logger.warning(
+            "Resend verification email failed for user ID %s.",
+            row["id"],
+        )
+
+    return jsonify({"message": generic_message})
+
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
