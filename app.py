@@ -757,14 +757,21 @@ def api_login():
 
     if row["status"] == "inactive":
         return error("This account has been deactivated. Contact an administrator.")
-
-    # Only the administrator configured in the server environment
-    # may bypass the portal-role match check.
+        # Only the configured administrator bypasses email verification.
     is_configured_admin = (
         bool(ADMIN_USERNAME)
         and row["role"] == "admin"
         and row["username"].lower() == ADMIN_USERNAME.lower()
     )
+
+    if not is_configured_admin and not row["email_verified"]:
+        return error(
+            "Please verify your email before logging in. "
+            "Check your inbox for the verification link.",
+            403,
+        )    
+
+    # Only the administrator configured in the server environment
 
     if row["role"] == "admin" and not is_configured_admin:
         return error("This administrator account is not authorized.", 403)
