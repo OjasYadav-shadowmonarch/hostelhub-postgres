@@ -775,6 +775,27 @@ tbody tr:hover { background: var(--surface-2); }
   background: var(--surface-2);
 }
 
+.detail-directions {
+  margin-top: 12px;
+}
+
+.detail-directions button {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.detail-directions button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.detail-directions .map-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
 .map-pin { font-size: 26px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4)); }
 .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-faint); margin: 18px 0 6px; }
 
