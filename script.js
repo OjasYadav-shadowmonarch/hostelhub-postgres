@@ -1036,8 +1036,74 @@ function openHostelDetail(id) {
       </div>
     ` : '')}
   `, "modal-wide");
+   initializeHostelDetailMap(h);
+   loadHostelReviews(h.id);
+}
 
-  loadHostelReviews(h.id);
+/* ---------------------- Hostel detail map ---------------------- */
+function initializeHostelDetailMap(hostel) {
+  const mapElement = document.getElementById("hostelDetailMap");
+
+  if (!mapElement) return;
+
+  // Prevent duplicate map initialization.
+  if (window.hostelHubDetailMap) {
+    window.hostelHubDetailMap.remove();
+    window.hostelHubDetailMap = null;
+  }
+
+  if (typeof maplibregl === "undefined") {
+    mapElement.textContent = "Map could not load. Please refresh the page.";
+    return;
+  }
+
+  const latitude = Number(hostel.latitude);
+  const longitude = Number(hostel.longitude);
+
+  // Do not display a misleading map if coordinates are missing or invalid.
+  if (
+    hostel.latitude == null ||
+    hostel.longitude == null ||
+    hostel.latitude === "" ||
+    hostel.longitude === "" ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    mapElement.textContent =
+      "Location coordinates are not available for this hostel yet.";
+    return;
+  }
+
+  const map = new maplibregl.Map({
+    container: mapElement,
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [longitude, latitude],
+    zoom: 15
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  const marker = new maplibregl.Marker()
+    .setLngLat([longitude, latitude])
+    .setPopup(
+      new maplibregl.Popup({ offset: 25 })
+        .setText(hostel.name || "Hostel location")
+    )
+    .addTo(map);
+
+  map.on("load", () => {
+    map.resize();
+  });
+
+  map.on("error", () => {
+    console.error("Hostel detail map encountered a loading error.");
+  });
+
+  window.hostelHubDetailMap = map;
 }
 
 async function contactOwner(hostelId) {
