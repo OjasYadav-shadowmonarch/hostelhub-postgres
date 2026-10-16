@@ -18,17 +18,11 @@ Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
 # GitHub 1st deployment test - 2026-10-03
-import smtplib
-import ssl
-from email.message import EmailMessage
 import requests
 import os
 import re
-import secrets
-import hashlib
-from datetime import date, datetime, timedelta
-from urllib.parse import urlencode
-from html import escape
+from datetime import date, datetime
+
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
@@ -51,53 +45,6 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PHONE_RE = re.compile(r"^\d{10}$")
-
-
-def send_resend_email(to_email, subject, html):
-    """Send a transactional email through Gmail SMTP."""
-
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_email = os.environ.get("SMTP_EMAIL", "").strip()
-    smtp_password = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
-
-    if not smtp_email or not smtp_password:
-        app.logger.error(
-            "Email sending is not configured: missing SMTP settings."
-        )
-        return False
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = f"HostelHub <{smtp_email}>"
-    message["To"] = to_email
-
-    message.set_content(
-        "This email contains HTML content. "
-        "Please view it in an HTML-compatible email application."
-    )
-    message.add_alternative(html, subtype="html")
-
-    try:
-        context = ssl.create_default_context()
-
-        with smtplib.SMTP(
-            smtp_host, smtp_port, timeout=20
-        ) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            server.login(smtp_email, smtp_password)
-            server.send_message(message)
-
-        return True
-
-    except (smtplib.SMTPException, OSError, ValueError) as exc:
-        app.logger.error(
-            "Gmail SMTP email delivery failed (%s).",
-            type(exc).__name__,
-        )
-        return False
 
 
 def env_bool(name, default=False):
@@ -132,6 +79,8 @@ def db_config():
     }
     if os.environ.get("PGPASSWORD"):
         cfg["password"] = os.environ["PGPASSWORD"]
+    if os.environ.get("PGSSLMODE"):
+        cfg["sslmode"] = os.environ["PGSSLMODE"]
     return cfg
 
 
@@ -226,29 +175,9 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK(role IN ('student','owner','admin')),
     joined DATE NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
-    password_hash TEXT NOT NULL,
-    email_verified BOOLEAN NOT NULL DEFAULT FALSE,
-    email_verification_token_hash TEXT,
-    email_verification_expires_at TIMESTAMPTZ,
-    email_verification_sent_at TIMESTAMPTZ
-
+    password_hash TEXT NOT NULL
 );
 
--- Add verification fields to existing databases safely.
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE;
-
-ALTER TABLE users
-    ALTER COLUMN email_verified SET DEFAULT FALSE;
-
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT;
-
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email_verification_sent_at TIMESTAMPTZ;
-    
 CREATE TABLE IF NOT EXISTS hostels (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -276,6 +205,15 @@ ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
 ALTER TABLE hostels
 ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS food_type TEXT DEFAULT 'Veg & Non-Veg';
+
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS curfew TEXT DEFAULT '10:00 PM';
+
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS sharing_pricing TEXT DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS inquiries (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES users(id),
@@ -285,12 +223,33 @@ CREATE TABLE IF NOT EXISTS inquiries (
     message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS reviews (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hostel_id INTEGER NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    comment TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wishlists (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hostel_id INTEGER NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, hostel_id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
 CREATE INDEX IF NOT EXISTS idx_hostels_owner     ON hostels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_hostels_college   ON hostels(college);
 CREATE INDEX IF NOT EXISTS idx_hostels_status    ON hostels(status);
 CREATE INDEX IF NOT EXISTS idx_inquiries_hostel  ON inquiries(hostel_id);
 CREATE INDEX IF NOT EXISTS idx_inquiries_student ON inquiries(student_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_hostel    ON reviews(hostel_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_student   ON reviews(student_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_student ON wishlists(student_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_hostel  ON wishlists(hostel_id);
 """
 
 # (id, name, username, email, phone, role, joined, status) -- password hash is added at insert time
@@ -462,13 +421,18 @@ def hostel_public(row):
     return {
         "id": row["id"], "name": row["name"], "type": row["type"],
         "ownerId": row["owner_id"], "college": row["college"], "location": row["location"],
-        "latitude": row["latitude"],
-        "longitude": row["longitude"],
+        "latitude": row.get("latitude") if isinstance(row, dict) else getattr(row, "latitude", None),
+        "longitude": row.get("longitude") if isinstance(row, dict) else getattr(row, "longitude", None),
         "distance": row["distance"], "rent": row["rent"], "rooms": row["rooms"],
         "rating": row["rating"], "status": row["status"], "live": bool(row["live"]),
         "views": row["views"],
-        "amenities": [a for a in row["amenities"].split(",") if a],
-        "description": row["description"], "image": row["image"],
+        "amenities": [a for a in row["amenities"].split(",") if a] if row.get("amenities") else [],
+        "description": row.get("description"), "image": row.get("image"),
+        "curfew": row.get("curfew") or "10:00 PM",
+        "foodType": row.get("food_type") or "Veg & Non-Veg",
+        "sharingPricing": row.get("sharing_pricing") or "",
+        "ownerPhone": row.get("owner_phone") or "",
+        "ownerName": row.get("owner_name") or "",
     }
 
 
@@ -608,7 +572,12 @@ def api_meta():
 def api_state():
     db = get_db()
     users = [user_public(r) for r in db.execute("SELECT * FROM users").fetchall()]
-    hostels = [hostel_public(r) for r in db.execute("SELECT * FROM hostels").fetchall()]
+    hostels_rows = db.execute("""
+        SELECT h.*, u.phone AS owner_phone, u.name AS owner_name
+        FROM hostels h
+        LEFT JOIN users u ON u.id = h.owner_id
+    """).fetchall()
+    hostels = [hostel_public(r) for r in hostels_rows]
     inquiries = [inquiry_public(r) for r in db.execute("SELECT * FROM inquiries").fetchall()]
     return jsonify({"users": users, "hostels": hostels, "inquiries": inquiries})
 
@@ -624,9 +593,9 @@ def api_me():
 # ---------------------------------------------------------------- #
 
 @app.post("/api/auth/login")
+
 def api_login():
     data = request.get_json(silent=True) or {}
-
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     portal = data.get("portal") or None
@@ -635,7 +604,6 @@ def api_login():
         return error("Please enter both username and password.")
 
     db = get_db()
-
     row = db.execute(
         "SELECT * FROM users WHERE lower(username)=lower(%s)",
         (username,)
@@ -648,37 +616,19 @@ def api_login():
         return error("Incorrect password.")
 
     if row["status"] == "inactive":
-        return error(
-            "This account has been deactivated. Contact an administrator."
-        )
+        return error("This account has been deactivated. Contact an administrator.")
 
-    # Only the administrator configured on the server
-    # can bypass the portal-role match check.
+    # Only the administrator configured in the server environment
+    # may bypass the portal-role match check.
     is_configured_admin = (
         bool(ADMIN_USERNAME)
         and row["role"] == "admin"
         and row["username"].lower() == ADMIN_USERNAME.lower()
     )
 
-    # Student and owner accounts must verify their email first.
-    # Configured administrator authentication remains unchanged.
-    if (
-        row["role"] in ("student", "owner")
-        and not row["email_verified"]
-    ):
-        return error(
-            "Please verify your email address before logging in.",
-            403
-        )
-
-    # Reject administrator accounts not configured on the server.
     if row["role"] == "admin" and not is_configured_admin:
-        return error(
-            "This administrator account is not authorized.",
-            403
-        )
+        return error("This administrator account is not authorized.", 403)
 
-    # Preserve the existing portal-role validation.
     if portal and not is_configured_admin and row["role"] != portal:
         return error(
             f"This account is registered as {row['role']}, not {portal}.",
@@ -686,9 +636,10 @@ def api_login():
         )
 
     session["user_id"] = row["id"]
-
     return jsonify({"user": user_public(row)})
-  
+
+
+
 @app.post("/api/auth/signup")
 def api_signup():
     data = request.get_json(silent=True) or {}
@@ -707,11 +658,11 @@ def api_signup():
         else "invalid"
     )
 
-    if not all([name, username, email, phone, password, confirm]):
+    if not name or not username or not email or not phone or not password or not confirm:
         return error("Please fill in all required fields.")
 
     if not EMAIL_RE.match(email):
-        return error("Please enter a valid email address.")
+        return error("Please enter a valid email address (e.g. name@example.com).")
 
     if not PHONE_RE.match(phone):
         return error(
@@ -732,41 +683,21 @@ def api_signup():
         )
 
     db = get_db()
-  
-    existing_email = db.execute(
-        "SELECT id FROM users WHERE lower(email)=lower(%s) LIMIT 1",
-        (email,),
-    ).fetchone()
-
-    if existing_email:
-        return error("That email address is already registered.")
 
     existing = db.execute(
-        "SELECT id FROM users WHERE lower(username)=lower(%s) LIMIT 1",
+        "SELECT id FROM users WHERE lower(username)=lower(%s)",
         (username,),
     ).fetchone()
 
     if existing:
         return error("That username is already taken.")
 
-    # Generate a secure token; store only its SHA-256 hash.
-    raw_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-    expires_at = datetime.now().astimezone() + timedelta(hours=24)
-
     try:
         cur = db.execute(
-            """
-            INSERT INTO users (
-                name, username, email, phone, role, joined, status,
-                password_hash, email_verified,
-                email_verification_token_hash,
-                email_verification_expires_at,
-                email_verification_sent_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s,NOW())
-            RETURNING id
-            """,
+            "INSERT INTO users "
+            "(name, username, email, phone, role, joined, status, password_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+            "RETURNING id",
             (
                 name,
                 username,
@@ -776,8 +707,6 @@ def api_signup():
                 date.today().isoformat(),
                 "active",
                 generate_password_hash(password),
-                token_hash,
-                expires_at,
             ),
         )
     except pg_errors.UniqueViolation:
@@ -787,251 +716,18 @@ def api_signup():
     new_id = cur.fetchone()["id"]
     db.commit()
 
-    base_url = os.environ.get(
-        "APP_BASE_URL", ""
-    ).strip().rstrip("/")
-
-    if not base_url:
-        app.logger.error(
-            "APP_BASE_URL is missing; verification email cannot be sent."
-        )
-        return jsonify({
-            "message": (
-                "Your account was created, but the verification email "
-                "could not be sent. Please contact support."
-            )
-        }), 201
-
-    verification_url = (
-        f"{base_url}/api/auth/verify-email?"
-        f"{urlencode({'token': raw_token})}"
-    )
-
-    safe_name = escape(name)
-    safe_url = escape(verification_url, quote=True)
-
-    html = f"""
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2>Welcome to HostelHub</h2>
-      <p>Hello {safe_name},</p>
-      <p>Please verify your email address to activate your account.</p>
-      <p>
-        <a href="{safe_url}"
-           style="display:inline-block;padding:12px 20px;
-                  background:#2563eb;color:#ffffff;
-                  text-decoration:none;border-radius:6px">
-          Verify email address
-        </a>
-      </p>
-      <p>This link expires in 24 hours and can only be used once.</p>
-      <p>If you did not create this account, you can ignore this email.</p>
-    </div>
-    """
-
-    sent = send_resend_email(
-        email,
-        "Verify your HostelHub email address",
-        html,
-    )
-
-    if not sent:
-        app.logger.warning(
-            "Verification email could not be sent for new user ID %s.",
-            new_id,
-        )
-
-    return jsonify({
-        "message": (
-            "Your account has been created. "
-            "Check your email for a verification link."
-        )
-    }), 201
-    
-@app.get("/api/auth/verify-email")
-def api_verify_email():
-    token = (request.args.get("token") or "").strip()
-
-    if not token:
-        return error("Verification token is missing.", 400)
-
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    db = get_db()
-
     row = db.execute(
-        """
-        SELECT id, name, email, email_verified,
-               email_verification_expires_at
-        FROM users
-        WHERE email_verification_token_hash = %s
-        """,
-        (token_hash,),
+        "SELECT * FROM users WHERE id=%s",
+        (new_id,),
     ).fetchone()
 
-    if not row:
-        return error(
-            "This verification link is invalid or has already been used.",
-            400,
-        )
+    session["user_id"] = row["id"]
 
-    if row["email_verified"]:
-        return error("This email address is already verified.", 400)
-
-    expires_at = row["email_verification_expires_at"]
-
-    if not expires_at or expires_at <= datetime.now().astimezone():
-        return error(
-            "This verification link has expired. Request a new one.",
-            400,
-        )
-
-    db.execute(
-        """
-        UPDATE users
-        SET email_verified = TRUE,
-            email_verification_token_hash = NULL,
-            email_verification_expires_at = NULL
-        WHERE id = %s
-        """,
-        (row["id"],),
-    )
-    db.commit()
-
-    safe_name = escape(row["name"])
-    welcome_html = f"""
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2>Welcome to HostelHub!</h2>
-      <p>Hello {safe_name},</p>
-      <p>Your email address has been verified successfully.</p>
-      <p>You can now log in to your HostelHub account.</p>
-      <p>Thank you for joining HostelHub.</p>
-    </div>
-    """
-
-    send_resend_email(
-        row["email"],
-        "Welcome to HostelHub",
-        welcome_html,
-    )
-
-    return jsonify({
-        "message": (
-            "Your email has been verified successfully. "
-            "You can now log in to HostelHub."
-        )
-    })
-
-@app.post("/api/auth/resend-verification")
-def api_resend_verification():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip()
-
-    if not email or not EMAIL_RE.match(email):
-        return error("Please enter a valid email address.")
-
-    generic_message = (
-        "If an unverified account exists for that email, "
-        "a verification link will be sent when eligible."
-    )
-
-    db = get_db()
-
-    row = db.execute(
-        """
-        SELECT id, name, email, email_verified,
-               email_verification_sent_at
-        FROM users
-        WHERE lower(email) = lower(%s)
-          AND role IN ('student', 'owner')
-        LIMIT 1
-        """,
-        (email,),
-    ).fetchone()
-
-    # Use the same response whether the account exists or not.
-    if not row or row["email_verified"]:
-        return jsonify({"message": generic_message})
-
-    sent_at = row["email_verification_sent_at"]
-    now = datetime.now().astimezone()
-
-    # Allow at most one verification email request per 60 seconds.
-    if sent_at and now - sent_at < timedelta(seconds=60):
-        return jsonify({"message": generic_message})
-
-    base_url = os.environ.get(
-        "APP_BASE_URL", ""
-    ).strip().rstrip("/")
-
-    if not base_url:
-        app.logger.error(
-            "APP_BASE_URL is missing; verification email cannot be sent."
-        )
-        return jsonify({"message": generic_message})
-
-    raw_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(
-        raw_token.encode("utf-8")
-    ).hexdigest()
-    expires_at = now + timedelta(hours=24)
-
-    db.execute(
-        """
-        UPDATE users
-        SET email_verification_token_hash = %s,
-            email_verification_expires_at = %s,
-            email_verification_sent_at = NOW()
-        WHERE id = %s
-          AND email_verified = FALSE
-        """,
-        (token_hash, expires_at, row["id"]),
-    )
-    db.commit()
-
-    verification_url = (
-        f"{base_url}/api/auth/verify-email?"
-        f"{urlencode({'token': raw_token})}"
-    )
-
-    safe_name = escape(row["name"])
-    safe_url = escape(verification_url, quote=True)
-
-    html = f"""
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2>Verify your HostelHub email</h2>
-      <p>Hello {safe_name},</p>
-      <p>Use the button below to verify your email address.</p>
-      <p>
-        <a href="{safe_url}"
-           style="display:inline-block;padding:12px 20px;
-                  background:#2563eb;color:#ffffff;
-                  text-decoration:none;border-radius:6px">
-          Verify email address
-        </a>
-      </p>
-      <p>This link expires in 24 hours and can only be used once.</p>
-      <p>If you did not request this, you can ignore this email.</p>
-    </div>
-    """
-
-    sent = send_resend_email(
-        row["email"],
-        "Your HostelHub verification link",
-        html,
-    )
-
-    if not sent:
-        app.logger.warning(
-            "Resend verification email failed for user ID %s.",
-            row["id"],
-        )
-
-    return jsonify({"message": generic_message})
-
+    return jsonify({"user": user_public(row)}), 201
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
     return jsonify({"ok": True})
-
 
 
 @app.put("/api/auth/profile")
@@ -1039,7 +735,6 @@ def api_update_profile():
     user, err = require_login()
     if err:
         return err
-
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     email = (data.get("email") or "").strip()
@@ -1047,38 +742,15 @@ def api_update_profile():
 
     if not name or not email or not phone:
         return error("Name, email and phone are required.")
-
     if not EMAIL_RE.match(email):
-        return error(
-            "Please enter a valid email address (e.g. name@example.com)."
-        )
-
+        return error("Please enter a valid email address (e.g. name@example.com).")
     if not PHONE_RE.match(phone):
-        return error(
-            "Phone number must be exactly 10 digits, "
-            "with no letters or symbols."
-        )
-
-    current_email = (user.get("email") or "").strip()
-
-    if email.lower() != current_email.lower():
-        return error(
-            "Email changes are temporarily unavailable. "
-            "Your email must be verified before it can be changed."
-        )
+        return error("Phone number must be exactly 10 digits, with no letters or symbols.")
 
     db = get_db()
-    db.execute(
-        "UPDATE users SET name=%s, phone=%s WHERE id=%s",
-        (name, phone, user["id"]),
-    )
+    db.execute("UPDATE users SET name=%s, email=%s, phone=%s WHERE id=%s", (name, email, phone, user["id"]))
     db.commit()
-
-    row = db.execute(
-        "SELECT * FROM users WHERE id=%s",
-        (user["id"],),
-    ).fetchone()
-
+    row = db.execute("SELECT * FROM users WHERE id=%s", (user["id"],)).fetchone()
     return jsonify({"user": user_public(row)})
 
 
@@ -1252,81 +924,18 @@ def api_toggle_availability(hostel_id):
     return jsonify({"hostel": hostel_public(hostel_or_404(db, hostel_id))})
 
 
-
 @app.post("/api/hostels/<int:hostel_id>/approve")
 def api_approve_hostel(hostel_id):
     _, err = require_role("admin")
     if err:
         return err
-
     db = get_db()
     h = hostel_or_404(db, hostel_id)
-
     if not h:
         return error("Listing not found.", 404)
-
-    # Notify the owner only when the listing first becomes live.
-    was_live = (
-    bool(h["live"])
-    and h["status"] == "verified"
-)
-    owner = db.execute(
-        "SELECT name, email FROM users WHERE id = %s",
-        (h["owner_id"],),
-    ).fetchone()
-
-    db.execute(
-        """
-        UPDATE hostels
-        SET status = 'verified', live = TRUE
-        WHERE id = %s
-        """,
-        (hostel_id,),
-    )
+    db.execute("UPDATE hostels SET status='verified', live=TRUE WHERE id=%s", (hostel_id,))
     db.commit()
-
-    # Email failure must not undo a successful approval.
-    if not was_live and owner and owner["email"]:
-        safe_name = escape(owner["name"] or "there")
-        safe_hostel_name = escape(h.get("name") or "your listing")
-
-        app_base_url = os.environ.get(
-            "APP_BASE_URL", ""
-        ).strip().rstrip("/")
-
-        listing_link = (
-            f"{app_base_url}/"
-            if app_base_url
-            else ""
-        )
-
-        link_html = (
-            f'<p><a href="{escape(listing_link, quote=True)}">'
-            "Visit HostelHub</a> to manage your listing.</p>"
-            if listing_link
-            else ""
-        )
-
-        email_html = f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-          <h2>Your HostelHub listing is live!</h2>
-          <p>Hello {safe_name},</p>
-          <p>Your listing <strong>{safe_hostel_name}</strong>
-          has been approved by the administrator and is now live.</p>
-          {link_html}
-          <p>Thank you for using HostelHub.</p>
-        </div>
-        """
-
-        send_resend_email(
-            owner["email"],
-            "Your HostelHub listing is now live",
-            email_html,
-        )
-
-    return jsonify({
-        "hostel": hostel_public(hostel_or_404(db, hostel_id))
-    })
+    return jsonify({"hostel": hostel_public(hostel_or_404(db, hostel_id))})
 
 
 @app.post("/api/hostels/<int:hostel_id>/reject")
@@ -1467,6 +1076,91 @@ def api_reset():
 
     return jsonify({"ok": True, "loggedOut": False})
 
+
+# ---------------------------------------------------------------- #
+# Reviews & Wishlist API
+# ---------------------------------------------------------------- #
+
+@app.get("/api/hostels/<int:hostel_id>/reviews")
+def api_get_reviews(hostel_id):
+    db = get_db()
+    rows = db.execute(
+        """SELECT r.id, r.rating, r.comment, r.created_at, u.name as student_name
+           FROM reviews r
+           JOIN users u ON u.id = r.student_id
+           WHERE r.hostel_id = %s
+           ORDER BY r.created_at DESC""",
+        (hostel_id,)
+    ).fetchall()
+    return jsonify({
+        "reviews": [
+            {
+                "id": r["id"],
+                "rating": r["rating"],
+                "comment": r["comment"],
+                "date": r["created_at"].strftime("%Y-%m-%d"),
+                "studentName": r["student_name"]
+            } for r in rows
+        ]
+    })
+
+
+@app.post("/api/hostels/<int:hostel_id>/reviews")
+def api_add_review(hostel_id):
+    user, err = require_role("student")
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        rating = int(body.get("rating", 0))
+    except (ValueError, TypeError):
+        return error("Invalid rating value.", 400)
+    comment = (body.get("comment") or "").strip()
+    if rating < 1 or rating > 5:
+        return error("Rating must be between 1 and 5.", 400)
+    if not comment:
+        return error("Please provide a review comment.", 400)
+
+    db = get_db()
+    existing = db.execute("SELECT id FROM reviews WHERE student_id=%s AND hostel_id=%s", (user["id"], hostel_id)).fetchone()
+    if existing:
+        db.execute("UPDATE reviews SET rating=%s, comment=%s, created_at=CURRENT_TIMESTAMP WHERE id=%s", (rating, comment, existing["id"]))
+    else:
+        db.execute("INSERT INTO reviews (student_id, hostel_id, rating, comment) VALUES (%s, %s, %s, %s)", (user["id"], hostel_id, rating, comment))
+
+    avg_row = db.execute("SELECT ROUND(AVG(rating)::numeric, 1) as avg_rating FROM reviews WHERE hostel_id=%s", (hostel_id,)).fetchone()
+    new_rating = float(avg_row["avg_rating"]) if avg_row and avg_row["avg_rating"] is not None else float(rating)
+    db.execute("UPDATE hostels SET rating=%s WHERE id=%s", (new_rating, hostel_id))
+    db.commit()
+
+    return jsonify({"ok": True, "newRating": new_rating})
+
+
+@app.get("/api/wishlist")
+def api_get_wishlist():
+    user, err = require_role("student")
+    if err:
+        return jsonify({"savedIds": []})
+    db = get_db()
+    rows = db.execute("SELECT hostel_id FROM wishlists WHERE student_id=%s", (user["id"],)).fetchall()
+    return jsonify({"savedIds": [r["hostel_id"] for r in rows]})
+
+
+@app.post("/api/wishlist/<int:hostel_id>/toggle")
+def api_toggle_wishlist(hostel_id):
+    user, err = require_role("student")
+    if err:
+        return err
+    db = get_db()
+    row = db.execute("SELECT id FROM wishlists WHERE student_id=%s AND hostel_id=%s", (user["id"], hostel_id)).fetchone()
+    if row:
+        db.execute("DELETE FROM wishlists WHERE id=%s", (row["id"],))
+        saved = False
+    else:
+        db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s)", (user["id"], hostel_id))
+        saved = True
+    db.commit()
+    return jsonify({"ok": True, "saved": saved, "hostelId": hostel_id})
 
 
 # ---------------------------------------------------------------- #
