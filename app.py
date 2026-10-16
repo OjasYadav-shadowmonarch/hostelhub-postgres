@@ -79,6 +79,8 @@ def db_config():
     }
     if os.environ.get("PGPASSWORD"):
         cfg["password"] = os.environ["PGPASSWORD"]
+    if os.environ.get("PGSSLMODE"):
+        cfg["sslmode"] = os.environ["PGSSLMODE"]
     return cfg
 
 
@@ -203,6 +205,15 @@ ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
 ALTER TABLE hostels
 ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS food_type TEXT DEFAULT 'Veg & Non-Veg';
+
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS curfew TEXT DEFAULT '10:00 PM';
+
+ALTER TABLE hostels
+ADD COLUMN IF NOT EXISTS sharing_pricing TEXT DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS inquiries (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES users(id),
@@ -212,12 +223,33 @@ CREATE TABLE IF NOT EXISTS inquiries (
     message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS reviews (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hostel_id INTEGER NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    comment TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wishlists (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hostel_id INTEGER NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, hostel_id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
 CREATE INDEX IF NOT EXISTS idx_hostels_owner     ON hostels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_hostels_college   ON hostels(college);
 CREATE INDEX IF NOT EXISTS idx_hostels_status    ON hostels(status);
 CREATE INDEX IF NOT EXISTS idx_inquiries_hostel  ON inquiries(hostel_id);
 CREATE INDEX IF NOT EXISTS idx_inquiries_student ON inquiries(student_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_hostel    ON reviews(hostel_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_student   ON reviews(student_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_student ON wishlists(student_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_hostel  ON wishlists(hostel_id);
 """
 
 # (id, name, username, email, phone, role, joined, status) -- password hash is added at insert time
@@ -389,13 +421,18 @@ def hostel_public(row):
     return {
         "id": row["id"], "name": row["name"], "type": row["type"],
         "ownerId": row["owner_id"], "college": row["college"], "location": row["location"],
-        "latitude": row["latitude"],
-        "longitude": row["longitude"],
+        "latitude": row.get("latitude") if isinstance(row, dict) else getattr(row, "latitude", None),
+        "longitude": row.get("longitude") if isinstance(row, dict) else getattr(row, "longitude", None),
         "distance": row["distance"], "rent": row["rent"], "rooms": row["rooms"],
         "rating": row["rating"], "status": row["status"], "live": bool(row["live"]),
         "views": row["views"],
-        "amenities": [a for a in row["amenities"].split(",") if a],
-        "description": row["description"], "image": row["image"],
+        "amenities": [a for a in row["amenities"].split(",") if a] if row.get("amenities") else [],
+        "description": row.get("description"), "image": row.get("image"),
+        "curfew": row.get("curfew") or "10:00 PM",
+        "foodType": row.get("food_type") or "Veg & Non-Veg",
+        "sharingPricing": row.get("sharing_pricing") or "",
+        "ownerPhone": row.get("owner_phone") or "",
+        "ownerName": row.get("owner_name") or "",
     }
 
 
@@ -535,7 +572,12 @@ def api_meta():
 def api_state():
     db = get_db()
     users = [user_public(r) for r in db.execute("SELECT * FROM users").fetchall()]
-    hostels = [hostel_public(r) for r in db.execute("SELECT * FROM hostels").fetchall()]
+    hostels_rows = db.execute("""
+        SELECT h.*, u.phone AS owner_phone, u.name AS owner_name
+        FROM hostels h
+        LEFT JOIN users u ON u.id = h.owner_id
+    """).fetchall()
+    hostels = [hostel_public(r) for r in hostels_rows]
     inquiries = [inquiry_public(r) for r in db.execute("SELECT * FROM inquiries").fetchall()]
     return jsonify({"users": users, "hostels": hostels, "inquiries": inquiries})
 
@@ -1034,6 +1076,91 @@ def api_reset():
 
     return jsonify({"ok": True, "loggedOut": False})
 
+
+# ---------------------------------------------------------------- #
+# Reviews & Wishlist API
+# ---------------------------------------------------------------- #
+
+@app.get("/api/hostels/<int:hostel_id>/reviews")
+def api_get_reviews(hostel_id):
+    db = get_db()
+    rows = db.execute(
+        """SELECT r.id, r.rating, r.comment, r.created_at, u.name as student_name
+           FROM reviews r
+           JOIN users u ON u.id = r.student_id
+           WHERE r.hostel_id = %s
+           ORDER BY r.created_at DESC""",
+        (hostel_id,)
+    ).fetchall()
+    return jsonify({
+        "reviews": [
+            {
+                "id": r["id"],
+                "rating": r["rating"],
+                "comment": r["comment"],
+                "date": r["created_at"].strftime("%Y-%m-%d"),
+                "studentName": r["student_name"]
+            } for r in rows
+        ]
+    })
+
+
+@app.post("/api/hostels/<int:hostel_id>/reviews")
+def api_add_review(hostel_id):
+    user, err = require_role("student")
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    try:
+        rating = int(body.get("rating", 0))
+    except (ValueError, TypeError):
+        return error("Invalid rating value.", 400)
+    comment = (body.get("comment") or "").strip()
+    if rating < 1 or rating > 5:
+        return error("Rating must be between 1 and 5.", 400)
+    if not comment:
+        return error("Please provide a review comment.", 400)
+
+    db = get_db()
+    existing = db.execute("SELECT id FROM reviews WHERE student_id=%s AND hostel_id=%s", (user["id"], hostel_id)).fetchone()
+    if existing:
+        db.execute("UPDATE reviews SET rating=%s, comment=%s, created_at=CURRENT_TIMESTAMP WHERE id=%s", (rating, comment, existing["id"]))
+    else:
+        db.execute("INSERT INTO reviews (student_id, hostel_id, rating, comment) VALUES (%s, %s, %s, %s)", (user["id"], hostel_id, rating, comment))
+
+    avg_row = db.execute("SELECT ROUND(AVG(rating)::numeric, 1) as avg_rating FROM reviews WHERE hostel_id=%s", (hostel_id,)).fetchone()
+    new_rating = float(avg_row["avg_rating"]) if avg_row and avg_row["avg_rating"] is not None else float(rating)
+    db.execute("UPDATE hostels SET rating=%s WHERE id=%s", (new_rating, hostel_id))
+    db.commit()
+
+    return jsonify({"ok": True, "newRating": new_rating})
+
+
+@app.get("/api/wishlist")
+def api_get_wishlist():
+    user, err = require_role("student")
+    if err:
+        return jsonify({"savedIds": []})
+    db = get_db()
+    rows = db.execute("SELECT hostel_id FROM wishlists WHERE student_id=%s", (user["id"],)).fetchall()
+    return jsonify({"savedIds": [r["hostel_id"] for r in rows]})
+
+
+@app.post("/api/wishlist/<int:hostel_id>/toggle")
+def api_toggle_wishlist(hostel_id):
+    user, err = require_role("student")
+    if err:
+        return err
+    db = get_db()
+    row = db.execute("SELECT id FROM wishlists WHERE student_id=%s AND hostel_id=%s", (user["id"], hostel_id)).fetchone()
+    if row:
+        db.execute("DELETE FROM wishlists WHERE id=%s", (row["id"],))
+        saved = False
+    else:
+        db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s)", (user["id"], hostel_id))
+        saved = True
+    db.commit()
+    return jsonify({"ok": True, "saved": saved, "hostelId": hostel_id})
 
 
 # ---------------------------------------------------------------- #

@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS hostels (
     image TEXT
 );
 
+ALTER TABLE hostels ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE hostels ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE hostels ADD COLUMN IF NOT EXISTS food_type TEXT DEFAULT 'Veg & Non-Veg';
+ALTER TABLE hostels ADD COLUMN IF NOT EXISTS curfew TEXT DEFAULT '10:00 PM';
+ALTER TABLE hostels ADD COLUMN IF NOT EXISTS sharing_pricing TEXT DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS inquiries (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES users(id),
@@ -63,12 +69,33 @@ CREATE TABLE IF NOT EXISTS inquiries (
     message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS reviews (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hostel_id INTEGER NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    comment TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wishlists (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hostel_id INTEGER NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, hostel_id)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
 CREATE INDEX IF NOT EXISTS idx_hostels_owner     ON hostels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_hostels_college   ON hostels(college);
 CREATE INDEX IF NOT EXISTS idx_hostels_status    ON hostels(status);
 CREATE INDEX IF NOT EXISTS idx_inquiries_hostel  ON inquiries(hostel_id);
 CREATE INDEX IF NOT EXISTS idx_inquiries_student ON inquiries(student_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_hostel    ON reviews(hostel_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_student   ON reviews(student_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_student ON wishlists(student_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_hostel  ON wishlists(hostel_id);
 
 -- ---------------------------------------------------------
 -- Demo data
