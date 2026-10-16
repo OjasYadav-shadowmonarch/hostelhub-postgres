@@ -238,44 +238,208 @@
 
   <main id="viewRoot" class="view-root"></main>
 </div>
-<!-- ---------- Footer ---------- -->
-  <footer class="l-footer">
+
+<!-- =====================================================
+     HOSTELHUB — SHARED SITE FOOTER
+     Place outside #landingScreen, #authScreen and #mainApp
+====================================================== -->
+<footer class="l-footer" id="siteFooter">
+  <div class="l-footer-container">
+
+    <!-- Main footer grid -->
     <div class="l-footer-top">
-      <div class="l-footer-brand">
-        <span class="l-logo"><span class="l-logo-mark" aria-hidden="true">🏠</span>HostelHub</span>
-        <p>Making student accommodation search simpler.</p>
-      </div>
 
-      <div class="l-footer-col">
-        <h4>Product</h4>
-        <a href="#find">Find Hostels</a>
-        <a href="#find">Compare</a>
-        <a href="#how">How It Works</a>
-      </div>
+      <!-- Brand -->
+      <section class="l-footer-brand" aria-label="About HostelHub">
+        <a class="l-footer-logo" href="#top" data-footer-action="home">
+          <span class="l-footer-logo-mark" aria-hidden="true">⌂</span>
+          <span class="l-footer-logo-name">Hostel<span>Hub</span></span>
+        </a>
 
-      <div class="l-footer-col">
-        <h4>For Owners</h4>
-        <a href="#" data-action="go-owner-portal">List Property</a>
+        <p class="l-footer-tagline">
+          Find your place. Start your journey.
+        </p>
+
+        <p class="l-footer-description">
+          Discover hostels, PGs and student accommodation near your
+          college. Compare your options and connect with property owners
+          through one convenient platform.
+        </p>
+
+        <div class="l-footer-badges">
+          <span class="l-footer-badge">
+            <span aria-hidden="true">✓</span>
+            Built for students
+          </span>
+          <span class="l-footer-badge">
+            <span aria-hidden="true">⌖</span>
+            Explore nearby stays
+          </span>
+        </div>
+      </section>
+
+      <!-- Explore -->
+      <nav class="l-footer-col" aria-label="Explore HostelHub">
+        <h3>Explore</h3>
+        <a href="#find" data-footer-action="find">Find Hostels</a>
+        <a href="#find" data-footer-action="compare">Compare Properties</a>
+        <a href="#how" data-footer-action="how">How It Works</a>
+        <a href="#top" data-footer-action="home">Home</a>
+      </nav>
+
+      <!-- Property owners -->
+      <nav class="l-footer-col" aria-label="Property owners">
+        <h3>For Property Owners</h3>
+        <a href="#" data-action="go-owner-portal">List Your Property</a>
         <a href="#" data-action="go-owner-portal">Owner Portal</a>
+      </nav>
+
+      <!-- Project and team -->
+      <nav class="l-footer-col" aria-label="Project and team">
+        <h3>Our Project</h3>
+        <a
+          href="https://github.com/OjasYadav-shadowmonarch/hostelhub-postgres"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="l-footer-link-icon" aria-hidden="true">⌘</span>
+          GitHub Repository
+          <span class="l-footer-external" aria-hidden="true">↗</span>
+        </a>
+        <a href="#footerTeam" data-footer-action="team">Meet the Team</a>
+        <a href="#footerTeam" data-footer-action="contributors">Contributors</a>
+      </nav>
+
+      <!-- Support and legal -->
+      <nav class="l-footer-col" aria-label="Support and legal">
+        <h3>Information</h3>
+        <a href="#footerAbout" data-footer-action="about">About HostelHub</a>
+        <a href="#footerContact" data-footer-action="contact">Contact</a>
+        <a href="#footerHelp" data-footer-action="help">Help &amp; FAQs</a>
+        <a href="#footerPrivacy" data-footer-action="privacy">Privacy Policy</a>
+        <a href="#footerTerms" data-footer-action="terms">Terms of Service</a>
+      </nav>
+
+    </div>
+
+    <!-- Platform benefits -->
+    <div class="l-footer-benefits" aria-label="HostelHub benefits">
+      <div class="l-footer-benefit">
+        <span class="l-footer-benefit-icon" aria-hidden="true">⌕</span>
+        <span>
+          <strong>Discover</strong>
+          <small>Explore accommodation options</small>
+        </span>
       </div>
 
-      <div class="l-footer-col">
-        <h4>Company</h4>
-        <span>About</span>
-        <span>Contact</span>
-        <span>Help</span>
+      <div class="l-footer-benefit">
+        <span class="l-footer-benefit-icon" aria-hidden="true">⇄</span>
+        <span>
+          <strong>Compare</strong>
+          <small>Evaluate your choices</small>
+        </span>
       </div>
 
-      <div class="l-footer-col">
-        <h4>Legal</h4>
-        <span>Privacy</span>
-        <span>Terms</span>
+      <div class="l-footer-benefit">
+        <span class="l-footer-benefit-icon" aria-hidden="true">⌂</span>
+        <span>
+          <strong>Connect</strong>
+          <small>Reach out to property owners</small>
+        </span>
       </div>
     </div>
+
+    <!-- Team / developer profiles -->
+    <section class="l-footer-team" id="footerTeam" aria-labelledby="footerTeamTitle">
+      <div class="l-footer-team-heading">
+        <div>
+          <span class="l-footer-eyebrow">THE PEOPLE BEHIND THE PROJECT</span>
+          <h3 id="footerTeamTitle">Built by our team.</h3>
+          <p>Connect with the developers and explore their work.</p>
+        </div>
+
+        <a
+          class="l-footer-github-button"
+          href="https://github.com/OjasYadav-shadowmonarch/hostelhub-postgres"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span aria-hidden="true">⌘</span>
+          View source code
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+
+      <div class="l-footer-team-grid">
+
+        <!-- Developer 1: replace/confirm the details below -->
+        <article class="l-footer-member">
+          <div class="l-footer-avatar" aria-hidden="true">OY</div>
+          <div class="l-footer-member-info">
+            <h4>Ojas Yadav</h4>
+            <p>Developer · HostelHub</p>
+            <div class="l-footer-member-links">
+              <a
+                href="https://github.com/OjasYadav-shadowmonarch"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Ojas Yadav on GitHub"
+              >GitHub ↗</a>
+              <a
+                href="https://www.linkedin.com/in/ojas-yadav-61b3042b9"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Ojas Yadav on LinkedIn"
+              >LinkedIn ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Duplicate this article for each verified team member.
+             Replace the name, initials, role and LinkedIn URL. -->
+        <article class="l-footer-member">
+          <div class="l-footer-avatar" aria-hidden="true">T2</div>
+          <div class="l-footer-member-info">
+            <h4>Team Member 2</h4>
+            <p>Project Team</p>
+            <div class="l-footer-member-links">
+              <a href="REPLACE_WITH_GITHUB_PROFILE"
+                 target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+              <a href="REPLACE_WITH_LINKEDIN_PROFILE"
+                 target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Add or remove member cards to match your actual team. -->
+
+      </div>
+    </section>
+
+    <!-- Bottom bar -->
     <div class="l-footer-bottom">
-      <span>© 2026 HostelHub. All rights reserved.</span>
+      <div class="l-footer-copyright">
+        <span>© <span id="footerYear"></span> HostelHub.</span>
+        <span>All rights reserved.</span>
+      </div>
+
+      <p class="l-footer-credit">
+        Designed to make student living easier.
+      </p>
+
+      <button
+        class="l-footer-back-top"
+        type="button"
+        data-footer-action="backtop"
+        aria-label="Back to top"
+      >
+        Back to top <span aria-hidden="true">↑</span>
+      </button>
     </div>
-  </footer>
+
+  </div>
+</footer>
+<!-- ================= END HOSTELHUB FOOTER ================= -->
 <!-- =================== MODAL =================== -->
 <div class="modal-overlay" id="modalOverlay" hidden>
   <div class="modal" id="modalBody"></div>
