@@ -18,4 +18,7 @@ ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verification_last_sent_at TIMESTAMPTZ;
+
 COMMIT;
