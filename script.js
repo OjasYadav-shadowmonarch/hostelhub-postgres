@@ -2312,6 +2312,47 @@ $("#modalOverlay").addEventListener("click", (e) => {
   if (e.target.id === "modalOverlay") closeModal();
 });
 
+/* ---------------------- Footer Init ---------------------- */
+
+function initFooter() {
+  const footerYear = document.getElementById("footerYear");
+
+  if (footerYear) {
+    footerYear.textContent = new Date().getFullYear();
+  }
+
+  const footer = document.getElementById("siteFooter");
+
+  if (!footer || footer.dataset.initialized === "true") {
+    return;
+  }
+
+  footer.dataset.initialized = "true";
+
+  footer.addEventListener("click", (event) => {
+    const actionLink = event.target.closest("[data-footer-action]");
+
+    if (!actionLink || !footer.contains(actionLink)) {
+      return;
+    }
+
+    const action = actionLink.dataset.footerAction;
+
+    if (action === "backtop" || action === "home") {
+      event.preventDefault();
+
+      window.scrollTo({
+        top: 0,
+        behavior: window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+        ).matches
+          ? "auto"
+          : "smooth"
+      });
+    }
+  });
+}
+
 /* ---------------------- Init ---------------------- */
 
 async function init() {
@@ -2335,12 +2376,15 @@ async function init() {
   showLandingScreen();
 }
 
+
 document.addEventListener("DOMContentLoaded", () => {
   init();
+  initFooter();
   initLandingScrollReveal();
 
   // Close the mobile nav drawer after tapping a section anchor (#find, #how, ...)
   const navLinks = document.getElementById("landingNavLinks");
+
   if (navLinks) {
     navLinks.querySelectorAll("a").forEach((link) => {
       link.addEventListener("click", closeMobileNav);

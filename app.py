@@ -98,6 +98,10 @@ COLLEGES = [
     "Jawaharlal Nehru University",
     "Jamia Millia Islamia",
     "Delhi Technological University",
+    "Shivaji University",
+    "COEP Technological University",
+    "Vishwakarma Institute of Technology",
+    "KIT's College of Engineering Kolhapur (Empowered Autonomous)",
 ]
 
 AMENITY_DEFS = [
