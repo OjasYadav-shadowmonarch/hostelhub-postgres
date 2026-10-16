@@ -21,6 +21,9 @@ only the storage layer changed.
 import requests
 import os
 import re
+import smtplib
+import ssl
+from email.message import EmailMessage
 from datetime import date, datetime
 
 import psycopg2
