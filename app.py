@@ -59,7 +59,51 @@ def env_bool(name, default=False):
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("SECRET_KEY") or "roomfinder-dev-secret-change-me"
+def send_resend_email(to_email, subject, html):
+    """Send an HTML email using Gmail SMTP."""
 
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_email = os.environ.get("SMTP_EMAIL", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
+
+    if not smtp_email or not smtp_password:
+        app.logger.error(
+            "Email sending is not configured: missing SMTP settings."
+        )
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = f"HostelHub <{smtp_email}>"
+    message["To"] = to_email
+
+    message.set_content(
+        "This email contains HTML content. "
+        "Please view it in an HTML-compatible email application."
+    )
+    message.add_alternative(html, subtype="html")
+
+    try:
+        context = ssl.create_default_context()
+
+        with smtplib.SMTP(
+            smtp_host, smtp_port, timeout=20
+        ) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(smtp_email, smtp_password)
+            server.send_message(message)
+
+        return True
+
+    except (smtplib.SMTPException, OSError, ValueError) as exc:
+        app.logger.error(
+            "Gmail SMTP email delivery failed (%s).",
+            type(exc).__name__,
+        )
+        return False
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
 # ---------------------------------------------------------------- #
