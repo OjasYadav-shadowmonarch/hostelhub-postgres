@@ -1002,9 +1002,15 @@ function openHostelDetail(id) {
       </div>
     </div>
 
-    <div class="section-label">Location</div>
-    <div class="map-box"><span class="map-pin">📍</span></div>
-    <p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
+    
+<div class="section-label">Location</div>
+<div
+  class="map-box"
+  id="hostelDetailMap"
+  data-latitude="${h.latitude ?? ''}"
+  data-longitude="${h.longitude ?? ''}"
+></div>
+<p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
 
     <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
       <span>Verified Student Reviews</span>
