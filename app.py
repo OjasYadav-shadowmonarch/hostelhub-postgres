@@ -24,7 +24,7 @@ import re
 import smtplib
 import ssl
 from email.message import EmailMessage
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import secrets
 import psycopg2
@@ -105,6 +105,75 @@ def send_resend_email(to_email, subject, html):
             type(exc).__name__,
         )
         return False
+def send_verification_email(user_id, to_email, name):
+    """Create and email a one-time verification link."""
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    base_url = os.environ.get(
+        "APP_BASE_URL",
+        "https://hostelhub-postgres.onrender.com",
+    ).strip().rstrip("/")
+
+    db = get_db()
+    db.execute(
+        """
+        UPDATE users
+        SET email_verified = FALSE,
+            email_verification_token_hash = %s,
+            email_verification_expires_at = %s,
+            email_verified_at = NULL
+        WHERE id = %s
+        """,
+        (token_hash, expires_at, user_id),
+    )
+    db.commit()
+
+    verification_url = (
+        f"{base_url}/api/auth/verify-email?token={token}"
+    )
+
+    safe_name = (
+        str(name)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
+    )
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+      <h2>Verify your HostelHub email</h2>
+      <p>Hello {safe_name},</p>
+      <p>Please verify your email address to activate your HostelHub account.</p>
+      <p>
+        <a href="{verification_url}"
+           style="display:inline-block;padding:12px 20px;background:#111827;
+                  color:#ffffff;text-decoration:none;border-radius:6px">
+          Verify email
+        </a>
+      </p>
+      <p>This link expires in 30 minutes and can only be used once.</p>
+      <p>If you did not create this account, you can ignore this email.</p>
+    </div>
+    """
+
+    sent = send_resend_email(
+        to_email,
+        "Verify your HostelHub email",
+        html,
+    )
+
+    if not sent:
+        app.logger.error(
+            "Verification email could not be sent for user_id=%s.",
+            user_id,
+        )
+
+    return sent      
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
 # ---------------------------------------------------------------- #
