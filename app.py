@@ -890,6 +890,80 @@ def api_signup():
         ),
         "verification_email_sent": True,
     }), 201
+
+@app.get("/api/auth/verify-email")
+def api_verify_email():
+    token = (request.args.get("token") or "").strip()
+
+    if not token:
+        return (
+            "Verification link is missing. Please open the link from your email.",
+            400,
+            {"Content-Type": "text/plain; charset=utf-8"},
+        )
+
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    db = get_db()
+
+    try:
+        row = db.execute(
+            """
+            UPDATE users
+            SET email_verified = TRUE,
+                email_verified_at = NOW(),
+                email_verification_token_hash = NULL,
+                email_verification_expires_at = NULL
+            WHERE email_verification_token_hash = %s
+              AND email_verification_expires_at > NOW()
+              AND email_verified = FALSE
+            RETURNING id, name, email
+            """,
+            (token_hash,),
+        ).fetchone()
+
+        if not row:
+            db.rollback()
+            return (
+                "This verification link is invalid, expired, or already used. "
+                "Please request a new verification email.",
+                400,
+                {"Content-Type": "text/plain; charset=utf-8"},
+            )
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        app.logger.exception("Email verification failed.")
+        return (
+            "We couldn't verify your email right now. Please try again later.",
+            500,
+            {"Content-Type": "text/plain; charset=utf-8"},
+        )
+
+    welcome_html = """
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+      <h2>Welcome to HostelHub!</h2>
+      <p>Your email has been verified successfully.</p>
+      <p>You can now log in to your HostelHub account.</p>
+      <p>Thank you for joining HostelHub.</p>
+    </div>
+    """
+
+    send_resend_email(
+        row["email"],
+        "Welcome to HostelHub",
+        welcome_html,
+    )
+
+    return (
+        "Email verified successfully! You can now log in to HostelHub.",
+        200,
+        {"Content-Type": "text/plain; charset=utf-8"},
+    )
+
+
+    
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
