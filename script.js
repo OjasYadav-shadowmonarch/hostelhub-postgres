@@ -58,7 +58,8 @@ function emptyState() {
     searchQuery: "",
     compareSelection: [],
     editingHostelId: null,
-    listingImageData: null
+    listingImageData: null,
+    wishlist: []
   };
 }
 
@@ -70,6 +71,14 @@ async function refreshState() {
   state.users = fresh.users;
   state.hostels = fresh.hostels;
   state.inquiries = fresh.inquiries;
+  if (state.currentUser && state.currentUser.role === "student") {
+    try {
+      const wl = await api("/wishlist");
+      state.wishlist = wl.savedIds || [];
+    } catch (_) {
+      state.wishlist = [];
+    }
+  }
 }
 
 /* ---------------------- Utilities ---------------------- */
@@ -477,6 +486,7 @@ async function logout() {
 const NAV_CONFIG = {
   student: [
     { id: "find", label: "Find Hostels", icon: "🔎" },
+    { id: "saved", label: "Saved", icon: "❤️" },
     { id: "inquiries", label: "My Inquiries", icon: "💬" },
     { id: "profile", label: "Profile", icon: "👤" }
   ],
@@ -573,7 +583,7 @@ function navigate(view) {
   }
 
   if (role === "student") {
-    state.studentSubtab = view === "inquiries" ? "inquiries" : "find";
+    state.studentSubtab = view === "inquiries" ? "inquiries" : (view === "saved" ? "saved" : "find");
     renderStudentView();
   } else if (role === "owner") {
     state.ownerSubtab = view === "inquiries" ? "inquiries" : (state.ownerSubtab === "inquiries" ? "listings" : state.ownerSubtab);
@@ -621,7 +631,32 @@ function renderStudentView() {
     root.innerHTML = studentInquiriesHTML();
     return;
   }
+  if (state.studentSubtab === "saved") {
+    root.innerHTML = studentSavedHTML();
+    return;
+  }
   root.innerHTML = studentFindHTML();
+}
+
+function studentSavedHTML() {
+  const savedList = state.hostels.filter(h => (state.wishlist || []).includes(h.id));
+  const cards = savedList.map(h => hostelCardHTML(h)).join("") || `
+    <div class="empty-state" style="grid-column:1/-1;">
+      <div class="empty-icon">❤️</div>
+      <div class="empty-title">No saved hostels yet</div>
+      <div>Click the heart icon on any hostel card to save it here for quick access.</div>
+    </div>`;
+
+  return `
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Saved Hostels</h1>
+        <p class="page-subtitle">Your bookmarked hostels and PGs, all in one place.</p>
+      </div>
+    </div>
+    <div class="step-eyebrow">${savedList.length} saved hostel${savedList.length === 1 ? "" : "s"}</div>
+    <div class="card-grid" style="margin-bottom:40px;">${cards}</div>
+  `;
 }
 
 function studentFindHTML() {
@@ -689,10 +724,13 @@ function studentFindHTML() {
 
 function hostelCardHTML(h) {
   const checked = state.compareSelection.includes(h.id) ? "checked" : "";
+  const isSaved = (state.wishlist || []).includes(h.id);
+  const ratingStr = typeof h.rating === "number" ? h.rating.toFixed(1) : (h.rating || "4.0");
   return `
     <div class="hostel-card">
-      <div class="hostel-thumb">
+      <div class="hostel-thumb" style="position:relative;">
         <span class="thumb-badge type-chip">${esc(h.type)}</span>
+        <button class="thumb-wishlist ${isSaved ? "is-saved" : ""}" data-action="toggle-wishlist" data-id="${h.id}" title="${isSaved ? "Saved to wishlist" : "Save to wishlist"}">${isSaved ? "❤️" : "🤍"}</button>
         ${hostelThumbHTML(h)}
       </div>
       <div class="hostel-body">
@@ -700,7 +738,7 @@ function hostelCardHTML(h) {
         <div class="hostel-meta">📍 ${esc(h.location)} · ${h.distance}km away</div>
         <div class="hostel-rent">${currency(h.rent)}<span> /month</span></div>
         <div class="hostel-foot">
-          <span class="rating">★ ${h.rating}</span>
+          <span class="rating">★ ${ratingStr}</span>
           <label class="compare-check"><input type="checkbox" data-action="toggle-compare" data-id="${h.id}" ${checked} /> Compare</label>
         </div>
         <button class="btn btn-block btn-sm" data-action="view-hostel" data-id="${h.id}">View Details</button>
@@ -917,8 +955,11 @@ function closeModal() {
 function openHostelDetail(id) {
   const h = findHostel(id);
   if (!h) return;
-  const owner = findUser(h.ownerId);
+  const owner = findUser(h.ownerId) || { name: h.ownerName || "Property Owner", phone: h.ownerPhone || "" };
   const amenities = amenityChips(h.amenities);
+  const ownerPhone = h.ownerPhone || (owner ? owner.phone : "");
+  const cleanPhone = String(ownerPhone || "").replace(/\D/g, "");
+  const ratingStr = typeof h.rating === "number" ? h.rating.toFixed(1) : (h.rating || "4.0");
 
   openModal(`
     <div class="modal-header">
@@ -926,10 +967,12 @@ function openHostelDetail(id) {
       <button class="modal-close" data-action="close-modal">✕</button>
     </div>
     <div class="detail-hero">${hostelThumbHTML(h)}</div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
       <span class="type-chip">${esc(h.type)}</span>
       ${statusBadge(h.status)}
-      <span class="rating">★ ${h.rating} rating</span>
+      <span class="rating detail-header-rating">★ ${ratingStr} rating</span>
+      <span class="badge" style="background:rgba(217,119,6,0.15); color:#f59e0b; border:1px solid rgba(217,119,6,0.3); padding:4px 8px; border-radius:12px; font-size:12px;">🍲 ${esc(h.foodType || "Veg & Non-Veg")}</span>
+      <span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:4px 8px; border-radius:12px; font-size:12px;">⏰ Curfew: ${esc(h.curfew || "10:00 PM")}</span>
     </div>
     <div class="detail-stats">
       <div class="detail-stat"><b>${currency(h.rent)}</b><span>PER MONTH</span></div>
@@ -942,17 +985,53 @@ function openHostelDetail(id) {
     <div class="section-label">Amenities & facilities</div>
     <div class="amenity-chip-list">${amenities || '<span class="amenity-chip">No amenities listed</span>'}</div>
 
-    <div class="section-label">Owner contact</div>
+    <div class="section-label">Owner contact & Quick Connect</div>
     <div class="owner-card" id="ownerContactBox">
       <div style="font-weight:700; margin-bottom:4px;">${esc(owner.name)}</div>
-      <div style="font-size:12.5px; color:var(--text-faint);">Tap below to reveal contact details and send an inquiry.</div>
-      <button class="btn btn-gold btn-sm" style="margin-top:10px;" data-action="contact-owner" data-id="${h.id}">📩 Contact Owner</button>
+      <div style="font-size:12.5px; color:var(--text-faint);">Connect directly with the property manager to verify room vacancy and book a visit.</div>
+      <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">
+        <button class="btn btn-gold btn-sm" data-action="contact-owner" data-id="${h.id}">📩 Send App Inquiry</button>
+        ${cleanPhone ? `
+          <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hi, I saw your listing for ${h.name} on HostelHub. Is a room currently available?`)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+            <span>💬</span> WhatsApp
+          </a>
+          <a href="tel:${cleanPhone}" class="btn btn-sm btn-outline" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
+            <span>📞</span> Call
+          </a>
+        ` : ''}
+      </div>
     </div>
 
     <div class="section-label">Location</div>
     <div class="map-box"><span class="map-pin">📍</span></div>
     <p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
+
+    <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
+      <span>Verified Student Reviews</span>
+      <span id="detailReviewCount" style="font-size:12px; color:var(--text-dim);">Loading reviews...</span>
+    </div>
+    <div id="hostelReviewsContainer" class="reviews-container">
+      <div style="font-size:12px; color:var(--text-faint);">Loading reviews...</div>
+    </div>
+
+    ${state.currentUser && state.currentUser.role === 'student' ? `
+      <div class="add-review-box" style="margin-top:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+        <div style="font-weight:600; font-size:13px; margin-bottom:8px;">Leave a Review & Rating</div>
+        <div class="star-rating-picker" id="reviewStarPicker" style="display:flex; gap:6px; margin-bottom:10px; font-size:22px;">
+          <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
+        </div>
+        <input type="hidden" id="selectedReviewRating" value="5" />
+        <textarea id="reviewCommentInput" class="input" rows="2" placeholder="Share your experience (cleanliness, food, environment, WiFi)..." style="width:100%; resize:vertical; font-size:13px; margin-bottom:8px;"></textarea>
+        <button class="btn btn-gold btn-sm" data-action="submit-review" data-id="${h.id}">Submit Review</button>
+      </div>
+    ` : (!state.currentUser ? `
+      <div style="font-size:12.5px; color:var(--text-faint); margin-top:10px;">
+        <a href="#" data-action="go-landing-login" style="color:var(--gold);">Log in as a student</a> to leave a review.
+      </div>
+    ` : '')}
   `, "modal-wide");
+
+  loadHostelReviews(h.id);
 }
 
 async function contactOwner(hostelId) {
@@ -971,12 +1050,23 @@ async function contactOwner(hostelId) {
   }
 
   const box = $("#ownerContactBox");
-  if (box) {
+  if (box && data.owner) {
+    const cleanPhone = String(data.owner.phone || "").replace(/\D/g, "");
     box.innerHTML = `
       <div style="font-weight:700; margin-bottom:4px;">${esc(data.owner.name)}</div>
       <div style="font-size:13px; color:var(--text-dim); line-height:1.8;">
         📞 ${esc(data.owner.phone)}<br>
         ✉️ ${esc(data.owner.email)}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+        ${cleanPhone ? `
+          <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hi, I saw your listing on HostelHub. Is a room currently available?`)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+            <span>💬</span> WhatsApp Owner
+          </a>
+          <a href="tel:${cleanPhone}" class="btn btn-sm btn-outline" style="text-decoration:none;">
+            <span>📞</span> Call
+          </a>
+        ` : ''}
       </div>`;
   }
 
@@ -1841,6 +1931,97 @@ async function searchListingLocation() {
     showToast(err.message, "error");
   }
 }
+
+async function toggleWishlist(hostelId) {
+  hostelId = Number(hostelId);
+  if (!state.currentUser) {
+    showToast("Please log in to save hostels to your wishlist.", "default");
+    showAuthScreen("student", "login");
+    return;
+  }
+  try {
+    const res = await api(`/wishlist/${hostelId}/toggle`, { method: "POST" });
+    if (res.saved) {
+      if (!state.wishlist.includes(hostelId)) state.wishlist.push(hostelId);
+      showToast("Saved to your wishlist!", "success");
+    } else {
+      state.wishlist = state.wishlist.filter(id => id !== hostelId);
+      showToast("Removed from your wishlist.", "default");
+    }
+    if (state.studentSubtab === "saved") {
+      renderStudentView();
+    } else {
+      $all(`[data-action="toggle-wishlist"][data-id="${hostelId}"]`).forEach(btn => {
+        btn.innerHTML = res.saved ? "❤️" : "🤍";
+        btn.classList.toggle("is-saved", res.saved);
+      });
+    }
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
+async function loadHostelReviews(hostelId) {
+  const container = $("#hostelReviewsContainer");
+  const countLabel = $("#detailReviewCount");
+  if (!container) return;
+  try {
+    const res = await api(`/hostels/${hostelId}/reviews`);
+    const reviews = res.reviews || [];
+    if (countLabel) countLabel.textContent = `${reviews.length} review${reviews.length === 1 ? '' : 's'}`;
+    if (!reviews.length) {
+      container.innerHTML = `<div style="font-size:13px; color:var(--text-faint); padding:10px 0;">No reviews yet. Be the first student to review this hostel!</div>`;
+      return;
+    }
+    container.innerHTML = reviews.map(r => `
+      <div class="review-card" style="padding:10px 12px; margin-top:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <span style="font-weight:600; font-size:13px;">${esc(r.studentName)}</span>
+          <span style="color:#f59e0b; font-size:12px;">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
+        </div>
+        <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5;">${esc(r.comment)}</div>
+        <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">${r.date}</div>
+      </div>
+    `).join("");
+  } catch (err) {
+    if (container) container.innerHTML = `<div style="font-size:12px; color:var(--text-faint);">Could not load reviews.</div>`;
+  }
+}
+
+async function submitReview(hostelId) {
+  if (!state.currentUser) {
+    showToast("Please log in as a student to leave a review.", "error");
+    return;
+  }
+  const ratingInput = $("#selectedReviewRating");
+  const commentInput = $("#reviewCommentInput");
+  const rating = Number(ratingInput ? ratingInput.value : 5);
+  const comment = (commentInput ? commentInput.value : "").trim();
+  if (!comment) {
+    showToast("Please write a short review comment.", "error");
+    return;
+  }
+
+  try {
+    const res = await api(`/hostels/${hostelId}/reviews`, {
+      method: "POST",
+      body: { rating, comment }
+    });
+    showToast("Review submitted successfully! Thank you.", "success");
+    if (commentInput) commentInput.value = "";
+    const h = findHostel(hostelId);
+    if (h && res.newRating) {
+      h.rating = res.newRating;
+      const ratingDisplay = $(".detail-header-rating");
+      if (ratingDisplay) ratingDisplay.textContent = `★ ${h.rating.toFixed(1)} rating`;
+    }
+    await loadHostelReviews(hostelId);
+    await refreshState();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
 const ACTIONS = {
   "toggle-password": (id, btn) => togglePassword(btn),
   "login": () => handleLogin(),
@@ -1864,6 +2045,8 @@ const ACTIONS = {
   "run-search": () => runSearch(),
   "filter-type": (id) => filterByType(id),
   "toggle-compare": (id) => toggleCompare(id),
+  "toggle-wishlist": (id) => toggleWishlist(id),
+  "submit-review": (id) => submitReview(id),
   "view-hostel": (id) => openHostelDetail(id),
   "view-hostel-from-compare": (id) => openHostelDetail(id),
   "compare-now": () => openCompareModal(),
@@ -1888,6 +2071,16 @@ const ACTIONS = {
 };
 
 document.addEventListener("click", (e) => {
+  const star = e.target.closest("#reviewStarPicker [data-star]");
+  if (star) {
+    const val = Number(star.dataset.star);
+    const hidden = $("#selectedReviewRating");
+    if (hidden) hidden.value = val;
+    $all("#reviewStarPicker [data-star]").forEach(s => {
+      s.style.color = Number(s.dataset.star) <= val ? "#f59e0b" : "var(--text-faint)";
+    });
+  }
+
   const el = e.target.closest("[data-action]");
   if (!el) return;
   const action = ACTIONS[el.dataset.action];
