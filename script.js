@@ -1099,11 +1099,145 @@ function initializeHostelDetailMap(hostel) {
     map.resize();
   });
 
-  map.on("error", () => {
-    console.error("Hostel detail map encountered a loading error.");
-  });
+  
+map.on("error", () => {
+  console.error("Hostel detail map encountered a loading error.");
+});
 
-  window.hostelHubDetailMap = map;
+// Directions controls, displayed below the MapLibre map.
+const directionsPanel = document.createElement("div");
+directionsPanel.className = "detail-directions";
+directionsPanel.innerHTML = `
+  <button type="button" class="btn btn-gold btn-sm"
+          id="hostelDirectionsButton">
+    📍 Get Directions from My Location
+  </button>
+  <p class="map-status" id="hostelDirectionsStatus" role="status">
+    Allow location access to show your route on the map.
+  </p>
+`;
+mapElement.insertAdjacentElement("afterend", directionsPanel);
+
+const directionsButton =
+  directionsPanel.querySelector("#hostelDirectionsButton");
+const directionsStatus =
+  directionsPanel.querySelector("#hostelDirectionsStatus");
+
+directionsButton.addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    directionsStatus.textContent =
+      "Your browser does not support location access.";
+    return;
+  }
+
+  directionsButton.disabled = true;
+  directionsStatus.textContent = "Finding your location…";
+
+  navigator.geolocation.getCurrentPosition(async (position) => {
+    const originLat = position.coords.latitude;
+    const originLon = position.coords.longitude;
+
+    directionsStatus.textContent = "Calculating route…";
+
+    try {
+      const url =
+        "https://router.project-osrm.org/route/v1/driving/" +
+        `${originLon},${originLat};${longitude},${latitude}` +
+        "?overview=full&geometries=geojson&steps=true";
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Routing service unavailable.");
+
+      const data = await response.json();
+      if (data.code !== "Ok" || !data.routes?.length) {
+        throw new Error("No driving route was found.");
+      }
+
+      const route = data.routes[0];
+      const sourceId = "hostel-detail-route";
+      const layerId = "hostel-detail-route-line";
+
+      // Remove the previous route if directions are requested again.
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: route.geometry
+        }
+      });
+
+      map.addLayer({
+        id: layerId,
+        type: "line",
+        source: sourceId,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round"
+        },
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 6,
+          "line-opacity": 0.9
+        }
+      });
+
+      if (window.hostelHubUserLocationMarker) {
+        window.hostelHubUserLocationMarker.remove();
+      }
+
+      window.hostelHubUserLocationMarker =
+        new maplibregl.Marker({ color: "#2563eb" })
+          .setLngLat([originLon, originLat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 25 })
+              .setText("Your location")
+          )
+          .addTo(map);
+
+      const bounds = new maplibregl.LngLatBounds(
+        [originLon, originLat],
+        [originLon, originLat]
+      );
+
+      route.geometry.coordinates.forEach(point => bounds.extend(point));
+
+      map.fitBounds(bounds, {
+        padding: 55,
+        maxZoom: 15,
+        duration: 700
+      });
+
+      const km = (route.distance / 1000).toFixed(1);
+      const minutes = Math.round(route.duration / 60);
+
+      directionsStatus.textContent =
+        `Route shown on map · ${km} km · about ${minutes} min by car. ` +
+        "Routing: OSRM / OpenStreetMap.";
+
+    } catch (error) {
+      directionsStatus.textContent =
+        error.message || "Could not calculate directions.";
+    } finally {
+      directionsButton.disabled = false;
+    }
+  }, (error) => {
+    directionsStatus.textContent =
+      error.code === 1
+        ? "Location access denied. Allow it in your browser settings and retry."
+        : "Could not find your location. Check your device location settings.";
+    directionsButton.disabled = false;
+  }, {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 60000
+  });
+});
+
+window.hostelHubDetailMap = map;
 }
 
 async function contactOwner(hostelId) {
