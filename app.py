@@ -839,8 +839,9 @@ def api_signup():
     if existing:
         return error("That username is already taken.")
 
+    
     try:
-                cur = db.execute(
+        cur = db.execute(
             """
             INSERT INTO users
                 (name, username, email, phone, role, joined,
@@ -859,12 +860,13 @@ def api_signup():
                 generate_password_hash(password),
             ),
         )
+        new_id = cur.fetchone()["id"]
+        db.commit()
+
     except pg_errors.UniqueViolation:
         db.rollback()
         return error("That username is already taken.")
 
-        new_id = cur.fetchone()["id"]
-    db.commit()
 
     email_sent = send_verification_email(
         new_id,
