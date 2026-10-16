@@ -226,8 +226,27 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK(role IN ('student','owner','admin')),
     joined DATE NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
-    password_hash TEXT NOT NULL
+    password_hash TEXT NOT NULL,
+    email_verified BOOLEAN NOT NULL DEFAULT TRUE,
+    email_verification_token_hash TEXT,
+    email_verification_expires_at TIMESTAMPTZ,
+    email_verified_at TIMESTAMPTZ
 );
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE users
+ALTER COLUMN email_verified SET DEFAULT FALSE;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS hostels (
     id SERIAL PRIMARY KEY,
