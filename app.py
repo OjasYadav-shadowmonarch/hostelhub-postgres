@@ -98,6 +98,10 @@ COLLEGES = [
     "Jawaharlal Nehru University",
     "Jamia Millia Islamia",
     "Delhi Technological University",
+    "Shivaji University",
+    "COEP Technological University",
+    "Vishwakarma Institute of Technology",
+    "KIT's College of Engineering Kolhapur (Empowered Autonomous)",
 ]
 
 AMENITY_DEFS = [
@@ -1157,7 +1161,7 @@ def api_toggle_wishlist(hostel_id):
         db.execute("DELETE FROM wishlists WHERE id=%s", (row["id"],))
         saved = False
     else:
-        db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s)", (user["id"], hostel_id))
+        db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s) ON CONFLICT (student_id, hostel_id) DO NOTHING", (user["id"], hostel_id))
         saved = True
     db.commit()
     return jsonify({"ok": True, "saved": saved, "hostelId": hostel_id})

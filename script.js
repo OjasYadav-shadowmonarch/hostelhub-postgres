@@ -161,13 +161,38 @@ const PORTAL_COPY = {
 };
 
 function showLandingScreen() {
+  closeModal();
   state.screen = "landing";
   $("#landingScreen").hidden = false;
   $("#authScreen").hidden = true;
   $("#mainApp").hidden = true;
   renderLandingStats();
   renderLandingPreview();
+  renderLandingNavActions();
   closeMobileNav();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderLandingNavActions() {
+  const container = $("#landingNavActions");
+  if (!container) return;
+  const isLight = document.body.classList.contains("light-theme");
+  const themeIcon = isLight ? "🌙" : "☀️";
+  if (state.currentUser) {
+    const role = state.currentUser.role;
+    const roleLabel = role === "admin" ? "Admin Panel" : (role === "owner" ? "Owner Dashboard" : "Find Hostels");
+    container.innerHTML = `
+      <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">${themeIcon}</button>
+      <button class="btn btn-ghost" data-action="logout">Sign Out</button>
+      <button class="btn btn-gold" data-action="return-to-app">Go to ${roleLabel} →</button>
+    `;
+  } else {
+    container.innerHTML = `
+      <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">${themeIcon}</button>
+      <button class="btn btn-ghost" data-action="go-landing-login">Log In</button>
+      <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
+    `;
+  }
 }
 
 function renderLandingStats() {
@@ -597,8 +622,11 @@ function navigate(view) {
 
 function toggleTheme() {
   document.body.classList.toggle("light-theme");
-  const btn = $('[data-action="toggle-theme"]');
-  if (btn) btn.textContent = document.body.classList.contains("light-theme") ? "🌙" : "☀️";
+  const isLight = document.body.classList.contains("light-theme");
+  try { localStorage.setItem("hostelhub_theme", isLight ? "light" : "dark"); } catch (_) {}
+  $all('[data-action="toggle-theme"]').forEach(btn => {
+    btn.textContent = isLight ? "🌙" : "☀️";
+  });
 }
 
 /* ---------------------- Shared components ---------------------- */
@@ -1003,7 +1031,12 @@ function openHostelDetail(id) {
     </div>
 
     <div class="section-label">Location</div>
-    <div class="map-box"><span class="map-pin">📍</span></div>
+    <div
+      class="map-box"
+      id="hostelDetailMap"
+      data-latitude="${h.latitude ?? ''}"
+      data-longitude="${h.longitude ?? ''}"
+    ></div>
     <p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
 
     <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
@@ -1030,8 +1063,207 @@ function openHostelDetail(id) {
       </div>
     ` : '')}
   `, "modal-wide");
-
+  initializeHostelDetailMap(h);
   loadHostelReviews(h.id);
+}
+
+/* ---------------------- Hostel detail map ---------------------- */
+function initializeHostelDetailMap(hostel) {
+  const mapElement = document.getElementById("hostelDetailMap");
+
+  if (!mapElement) return;
+
+  // Prevent duplicate map initialization.
+  if (window.hostelHubDetailMap) {
+    window.hostelHubDetailMap.remove();
+    window.hostelHubDetailMap = null;
+  }
+
+  if (typeof maplibregl === "undefined") {
+    mapElement.textContent = "Map could not load. Please refresh the page.";
+    return;
+  }
+
+  const latitude = Number(hostel.latitude);
+  const longitude = Number(hostel.longitude);
+
+  // Do not display a misleading map if coordinates are missing or invalid.
+  if (
+    hostel.latitude == null ||
+    hostel.longitude == null ||
+    hostel.latitude === "" ||
+    hostel.longitude === "" ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    mapElement.textContent =
+      "Location coordinates are not available for this hostel yet.";
+    return;
+  }
+
+  const map = new maplibregl.Map({
+    container: mapElement,
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [longitude, latitude],
+    zoom: 15
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  const marker = new maplibregl.Marker()
+    .setLngLat([longitude, latitude])
+    .setPopup(
+      new maplibregl.Popup({ offset: 25 })
+        .setText(hostel.name || "Hostel location")
+    )
+    .addTo(map);
+
+  map.on("load", () => {
+    map.resize();
+  });
+
+  map.on("error", () => {
+    console.error("Hostel detail map encountered a loading error.");
+  });
+
+// Directions controls, displayed below the MapLibre map.
+const directionsPanel = document.createElement("div");
+directionsPanel.className = "detail-directions";
+directionsPanel.innerHTML = `
+  <button type="button" class="btn btn-gold btn-sm"
+          id="hostelDirectionsButton">
+    📍 Get Directions from My Location
+  </button>
+  <p class="map-status" id="hostelDirectionsStatus" role="status">
+    Allow location access to show your route on the map.
+  </p>
+`;
+mapElement.insertAdjacentElement("afterend", directionsPanel);
+
+const directionsButton =
+  directionsPanel.querySelector("#hostelDirectionsButton");
+const directionsStatus =
+  directionsPanel.querySelector("#hostelDirectionsStatus");
+
+directionsButton.addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    directionsStatus.textContent =
+      "Your browser does not support location access.";
+    return;
+  }
+
+  directionsButton.disabled = true;
+  directionsStatus.textContent = "Finding your location…";
+
+  navigator.geolocation.getCurrentPosition(async (position) => {
+    const originLat = position.coords.latitude;
+    const originLon = position.coords.longitude;
+
+    directionsStatus.textContent = "Calculating route…";
+
+    try {
+      const url =
+        "https://router.project-osrm.org/route/v1/driving/" +
+        `${originLon},${originLat};${longitude},${latitude}` +
+        "?overview=full&geometries=geojson&steps=true";
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Routing service unavailable.");
+
+      const data = await response.json();
+      if (data.code !== "Ok" || !data.routes?.length) {
+        throw new Error("No driving route was found.");
+      }
+
+      const route = data.routes[0];
+      const sourceId = "hostel-detail-route";
+      const layerId = "hostel-detail-route-line";
+
+      // Remove the previous route if directions are requested again.
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: route.geometry
+        }
+      });
+
+      map.addLayer({
+        id: layerId,
+        type: "line",
+        source: sourceId,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round"
+        },
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 6,
+          "line-opacity": 0.9
+        }
+      });
+
+      if (window.hostelHubUserLocationMarker) {
+        window.hostelHubUserLocationMarker.remove();
+      }
+
+      window.hostelHubUserLocationMarker =
+        new maplibregl.Marker({ color: "#2563eb" })
+          .setLngLat([originLon, originLat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 25 })
+              .setText("Your location")
+          )
+          .addTo(map);
+
+      const bounds = new maplibregl.LngLatBounds(
+        [originLon, originLat],
+        [originLon, originLat]
+      );
+
+      route.geometry.coordinates.forEach(point => bounds.extend(point));
+
+      map.fitBounds(bounds, {
+        padding: 55,
+        maxZoom: 15,
+        duration: 700
+      });
+
+      const km = (route.distance / 1000).toFixed(1);
+      const minutes = Math.round(route.duration / 60);
+
+      directionsStatus.textContent =
+        `Route shown on map · ${km} km · about ${minutes} min by car. ` +
+        "Routing: OSRM / OpenStreetMap.";
+
+    } catch (error) {
+      directionsStatus.textContent =
+        error.message || "Could not calculate directions.";
+    } finally {
+      directionsButton.disabled = false;
+    }
+  }, (error) => {
+    directionsStatus.textContent =
+      error.code === 1
+        ? "Location access denied. Allow it in your browser settings and retry."
+        : "Could not find your location. Check your device location settings.";
+    directionsButton.disabled = false;
+  }, {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 60000
+  });
+});
+
+window.hostelHubDetailMap = map;
 }
 
 async function contactOwner(hostelId) {
@@ -2031,8 +2263,12 @@ const ACTIONS = {
   "go-landing-login": () => goLandingLogin(),
   "go-landing-signup": () => goLandingSignup(),
   "go-owner-portal": () => goOwnerPortal(),
+  "return-to-app": () => enterApp(),
   "browse-guest": () => browseGuest(),
-  "back-to-landing": () => showLandingScreen(),
+  "back-to-landing": (id, btn, e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    showLandingScreen();
+  },
   "toggle-mobile-nav": () => toggleMobileNav(),
   "view-hostel-preview": (id) => viewHostelFromLanding(id),
   "switch-auth-mode": (id) => switchAuthMode(id),
@@ -2081,6 +2317,15 @@ document.addEventListener("click", (e) => {
     });
   }
 
+  const footerAction = e.target.closest("[data-footer-action]");
+  if (footerAction) {
+    const act = footerAction.dataset.footerAction;
+    if (act === "backtop" || act === "home") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
   const el = e.target.closest("[data-action]");
   if (!el) return;
   const action = ACTIONS[el.dataset.action];
@@ -2109,6 +2354,14 @@ $("#modalOverlay").addEventListener("click", (e) => {
 /* ---------------------- Init ---------------------- */
 
 async function init() {
+  try {
+    const footerYr = document.getElementById("footerYear");
+    if (footerYr) footerYr.textContent = new Date().getFullYear();
+    if (localStorage.getItem("hostelhub_theme") === "light") {
+      document.body.classList.add("light-theme");
+      $all('[data-action="toggle-theme"]').forEach(btn => { btn.textContent = "🌙"; });
+    }
+  } catch (_) {}
   try {
     const meta = await api("/meta");
     COLLEGES = meta.colleges;
