@@ -204,7 +204,41 @@
     </div>
   </section>
 
-  <!-- ---------- Footer ---------- -->
+  
+</div>
+
+<!-- =================== AUTH SCREEN (student / owner — portal-aware; admin signs in through either with its own credentials) =================== -->
+<div id="authScreen" class="auth-screen" hidden>
+  <div class="auth-orb orb-1">
+</div>
+  <div class="role-bg" aria-hidden="true">
+  <canvas class="role-bg-canvas"></canvas>
+  <div class="role-bg-glow"></div>
+  <div class="role-bg-grid"></div>
+</div>
+  <div class="auth-orb orb-2"></div>
+  <div id="authCardContainer"></div>
+</div>
+
+<!-- =================== MAIN APP =================== -->
+<div id="mainApp" class="main-app" hidden>
+  <div class="role-bg" aria-hidden="true">
+  <canvas class="role-bg-canvas"></canvas>
+  <div class="role-bg-glow"></div>
+  <div class="role-bg-grid"></div>
+</div>
+  <header class="navbar">
+    <div class="nav-left">
+      <span class="nav-logo" id="navLogo">🏠 HostelHub</span>
+      <span class="nav-role-tag" id="navRoleTag">Student</span>
+    </div>
+    <nav class="nav-tabs" id="navTabs"></nav>
+    <div class="nav-right" id="navRight"></div>
+  </header>
+
+  <main id="viewRoot" class="view-root"></main>
+</div>
+<!-- ---------- Footer ---------- -->
   <footer class="l-footer">
     <div class="l-footer-top">
       <div class="l-footer-brand">
@@ -242,40 +276,6 @@
       <span>© 2026 HostelHub. All rights reserved.</span>
     </div>
   </footer>
-</div>
-
-<!-- =================== AUTH SCREEN (student / owner — portal-aware; admin signs in through either with its own credentials) =================== -->
-<div id="authScreen" class="auth-screen" hidden>
-  <div class="auth-orb orb-1">
-</div>
-  <div class="role-bg" aria-hidden="true">
-  <canvas class="role-bg-canvas"></canvas>
-  <div class="role-bg-glow"></div>
-  <div class="role-bg-grid"></div>
-</div>
-  <div class="auth-orb orb-2"></div>
-  <div id="authCardContainer"></div>
-</div>
-
-<!-- =================== MAIN APP =================== -->
-<div id="mainApp" class="main-app" hidden>
-  <div class="role-bg" aria-hidden="true">
-  <canvas class="role-bg-canvas"></canvas>
-  <div class="role-bg-glow"></div>
-  <div class="role-bg-grid"></div>
-</div>
-  <header class="navbar">
-    <div class="nav-left">
-      <span class="nav-logo" id="navLogo">🏠 HostelHub</span>
-      <span class="nav-role-tag" id="navRoleTag">Student</span>
-    </div>
-    <nav class="nav-tabs" id="navTabs"></nav>
-    <div class="nav-right" id="navRight"></div>
-  </header>
-
-  <main id="viewRoot" class="view-root"></main>
-</div>
-
 <!-- =================== MODAL =================== -->
 <div class="modal-overlay" id="modalOverlay" hidden>
   <div class="modal" id="modalBody"></div>
