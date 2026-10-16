@@ -833,11 +833,14 @@ def api_signup():
         return error("That username is already taken.")
 
     try:
-        cur = db.execute(
-            "INSERT INTO users "
-            "(name, username, email, phone, role, joined, status, password_hash) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
-            "RETURNING id",
+                cur = db.execute(
+            """
+            INSERT INTO users
+                (name, username, email, phone, role, joined,
+                 status, password_hash, email_verified)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE)
+            RETURNING id
+            """,
             (
                 name,
                 username,
@@ -853,17 +856,31 @@ def api_signup():
         db.rollback()
         return error("That username is already taken.")
 
-    new_id = cur.fetchone()["id"]
+        new_id = cur.fetchone()["id"]
     db.commit()
 
-    row = db.execute(
-        "SELECT * FROM users WHERE id=%s",
-        (new_id,),
-    ).fetchone()
+    email_sent = send_verification_email(
+        new_id,
+        email,
+        name,
+    )
 
-    session["user_id"] = row["id"]
+    if not email_sent:
+        return jsonify({
+            "message": (
+                "Your account was created, but we couldn't send the "
+                "verification email. Please try again later or contact support."
+            ),
+            "verification_email_sent": False,
+        }), 201
 
-    return jsonify({"user": user_public(row)}), 201
+    return jsonify({
+        "message": (
+            "Account created. Check your email and click the "
+            "verification link before logging in."
+        ),
+        "verification_email_sent": True,
+    }), 201
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
