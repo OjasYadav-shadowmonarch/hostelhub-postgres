@@ -18,9 +18,6 @@ Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
 # GitHub 1st deployment test - 2026-10-03
-import smtplib
-import ssl
-from email.message import EmailMessage
 import requests
 import os
 import re
@@ -52,49 +49,51 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PHONE_RE = re.compile(r"^\d{10}$")
 
-
 def send_resend_email(to_email, subject, html):
-    """Send a transactional email through Gmail SMTP."""
+    """Send a transactional email through Resend.
 
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_email = os.environ.get("SMTP_EMAIL", "").strip()
-    smtp_password = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
+    Returns True when Resend accepts the request, otherwise False.
+    Never logs the API key or email body.
+    """
+    api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "").strip()
 
-    if not smtp_email or not smtp_password:
+    if not api_key or not from_email:
         app.logger.error(
-            "Email sending is not configured: missing SMTP settings."
+            "Email sending is not configured: missing Resend settings."
         )
         return False
 
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = f"HostelHub <{smtp_email}>"
-    message["To"] = to_email
-
-    message.set_content(
-        "This email contains HTML content. "
-        "Please view it in an HTML-compatible email application."
-    )
-    message.add_alternative(html, subtype="html")
+    payload = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+    }
 
     try:
-        context = ssl.create_default_context()
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=10,
+        )
 
-        with smtplib.SMTP(
-            smtp_host, smtp_port, timeout=20
-        ) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            server.login(smtp_email, smtp_password)
-            server.send_message(message)
+        if not response.ok:
+            app.logger.error(
+                "Resend rejected an email request (HTTP %s).",
+                response.status_code,
+            )
+            return False
 
         return True
 
-    except (smtplib.SMTPException, OSError, ValueError) as exc:
+    except requests.RequestException as exc:
         app.logger.error(
-            "Gmail SMTP email delivery failed (%s).",
+            "Email request failed (%s).",
             type(exc).__name__,
         )
         return False
