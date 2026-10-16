@@ -419,12 +419,12 @@ async function handleSignup() {
     return;
   }
   if (!isValidEmail(email)) {
-    errorEl.textContent = "Please enter a valid email address (e.g. name@example.com).";
+    errorEl.textContent = "Please enter a valid email address.";
     errorEl.hidden = false;
     return;
   }
   if (!isValidPhone(phone)) {
-    errorEl.textContent = "Phone number must be exactly 10 digits, with no letters or symbols.";
+    errorEl.textContent = "Phone number must be exactly 10 digits.";
     errorEl.hidden = false;
     return;
   }
@@ -439,31 +439,82 @@ async function handleSignup() {
     return;
   }
 
-  let data;
   try {
-    data = await api("/auth/signup", {
+    await api("/auth/signup", {
       method: "POST",
-      body: { name, username, email, phone, password, confirm, role: state.activePortal }
+      body: {
+        name, username, email, phone, password, confirm,
+        role: state.activePortal
+      }
     });
+
+    // Do not log the user in before email verification.
+    renderAuthCard();
+    const card = $(".auth-card");
+    card.innerHTML = `
+      <div class="auth-icon">✉️</div>
+      <h1 class="auth-title">Check your email</h1>
+      <p class="auth-subtitle">
+        Your account has been created. Verify your email address
+        using the link we sent before signing in.
+      </p>
+      <div class="field-group">
+        <label for="resendVerificationEmail">Email address</label>
+        <input type="email" id="resendVerificationEmail"
+               value="${esc(email)}" autocomplete="email">
+      </div>
+      <p class="form-error" id="resendVerificationMessage" hidden></p>
+      <button class="btn btn-gold btn-block"
+              data-action="resend-verification">
+        Resend verification email
+      </button>
+      <p class="switch-line">
+        Already verified?
+        <a href="#" data-action="switch-auth-mode" data-id="login">
+          Sign in
+        </a>
+      </p>
+    `;
   } catch (err) {
     errorEl.textContent = err.message;
     errorEl.hidden = false;
-    return;
   }
-
-  await refreshState();
-  state.currentUser = data.user;
-  state.guestBrowsing = false;
-  const hadPendingContact = !!state.pendingContactHostelId;
-  if (!hadPendingContact) showToast(`Welcome to HostelHub, ${name.split(" ")[0]}!`, "success");
-  enterApp();
-  if (hadPendingContact) resumeAfterAuth();
 }
 
 function switchPortal(role) {
   showAuthScreen(role, "login");
 }
 
+async function handleResendVerification() {
+  const emailInput = $("#resendVerificationEmail");
+  const messageEl = $("#resendVerificationMessage");
+
+  if (!emailInput || !messageEl) return;
+
+  const email = emailInput.value.trim();
+  messageEl.hidden = true;
+
+  if (!isValidEmail(email)) {
+    messageEl.textContent = "Please enter a valid email address.";
+    messageEl.hidden = false;
+    return;
+  }
+
+  try {
+    const result = await api("/auth/resend-verification", {
+      method: "POST",
+      body: { email }
+    });
+
+    messageEl.textContent =
+      result.message || "If your account needs verification, check your email.";
+    messageEl.hidden = false;
+  } catch (err) {
+    messageEl.textContent =
+      err.message || "Unable to request a verification email. Please try again.";
+    messageEl.hidden = false;
+  }
+}
 async function logout() {
   try { await api("/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
   state.currentUser = null;
@@ -1845,6 +1896,7 @@ const ACTIONS = {
   "toggle-password": (id, btn) => togglePassword(btn),
   "login": () => handleLogin(),
   "signup": () => handleSignup(),
+  "resend-verification": () => handleResendVerification(),
   "logout": () => logout(),
   "toggle-theme": () => toggleTheme(),
   "go-landing-login": () => goLandingLogin(),
