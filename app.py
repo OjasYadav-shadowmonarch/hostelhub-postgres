@@ -25,7 +25,8 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 from datetime import date, datetime
-
+import hashlib
+import secrets
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
