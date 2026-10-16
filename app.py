@@ -300,7 +300,8 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified BOOLEAN NOT NULL DEFAULT TRUE,
     email_verification_token_hash TEXT,
     email_verification_expires_at TIMESTAMPTZ,
-    email_verified_at TIMESTAMPTZ
+    email_verified_at TIMESTAMPTZ,
+    email_verification_last_sent_at TIMESTAMPTZ
 );
 
 ALTER TABLE users
