@@ -21,6 +21,8 @@ only the storage layer changed.
 import requests
 import os
 import re
+import secrets
+import hmac
 from datetime import date, datetime
 
 import psycopg2
@@ -66,7 +68,34 @@ app.config.update(
     SESSION_COOKIE_SECURE=bool(os.environ.get("RENDER")),
     SESSION_COOKIE_SAMESITE="Lax",
 )
+@app.get("/api/csrf-token")
+def api_csrf_token():
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return jsonify({"csrf_token": token})
+  def csrf_is_valid():
+    expected = session.get("csrf_token")
+    supplied = request.headers.get("X-CSRF-Token", "")
 
+    return bool(
+        expected
+        and supplied
+        and hmac.compare_digest(expected, supplied)
+    )
+    @app.before_request
+def protect_state_changing_requests():
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+
+    if not request.path.startswith("/api/"):
+        return None
+
+    if not csrf_is_valid():
+        return jsonify({"error": "Invalid or missing CSRF token."}), 403
+
+    return None
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
 # ---------------------------------------------------------------- #
@@ -671,9 +700,14 @@ def api_login():
             409
         )
 
-    session["user_id"] = row["id"]
-    return jsonify({"user": user_public(row)})
+  session.clear()
+  session["user_id"] = row["id"]
+  session["csrf_token"] = secrets.token_urlsafe(32)
 
+  return jsonify({
+    "user": user_public(row),
+    "csrf_token": session["csrf_token"],
+})
 
 
 @app.post("/api/auth/signup")
