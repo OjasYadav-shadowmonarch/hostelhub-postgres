@@ -161,13 +161,38 @@ const PORTAL_COPY = {
 };
 
 function showLandingScreen() {
+  closeModal();
   state.screen = "landing";
   $("#landingScreen").hidden = false;
   $("#authScreen").hidden = true;
   $("#mainApp").hidden = true;
   renderLandingStats();
   renderLandingPreview();
+  renderLandingNavActions();
   closeMobileNav();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderLandingNavActions() {
+  const container = $("#landingNavActions");
+  if (!container) return;
+  const isLight = document.body.classList.contains("light-theme");
+  const themeIcon = isLight ? "🌙" : "☀️";
+  if (state.currentUser) {
+    const role = state.currentUser.role;
+    const roleLabel = role === "admin" ? "Admin Panel" : (role === "owner" ? "Owner Dashboard" : "Find Hostels");
+    container.innerHTML = `
+      <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">${themeIcon}</button>
+      <button class="btn btn-ghost" data-action="logout">Sign Out</button>
+      <button class="btn btn-gold" data-action="return-to-app">Go to ${roleLabel} →</button>
+    `;
+  } else {
+    container.innerHTML = `
+      <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">${themeIcon}</button>
+      <button class="btn btn-ghost" data-action="go-landing-login">Log In</button>
+      <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
+    `;
+  }
 }
 
 function renderLandingStats() {
@@ -597,8 +622,11 @@ function navigate(view) {
 
 function toggleTheme() {
   document.body.classList.toggle("light-theme");
-  const btn = $('[data-action="toggle-theme"]');
-  if (btn) btn.textContent = document.body.classList.contains("light-theme") ? "🌙" : "☀️";
+  const isLight = document.body.classList.contains("light-theme");
+  try { localStorage.setItem("hostelhub_theme", isLight ? "light" : "dark"); } catch (_) {}
+  $all('[data-action="toggle-theme"]').forEach(btn => {
+    btn.textContent = isLight ? "🌙" : "☀️";
+  });
 }
 
 /* ---------------------- Shared components ---------------------- */
@@ -1002,15 +1030,14 @@ function openHostelDetail(id) {
       </div>
     </div>
 
-    
-<div class="section-label">Location</div>
-<div
-  class="map-box"
-  id="hostelDetailMap"
-  data-latitude="${h.latitude ?? ''}"
-  data-longitude="${h.longitude ?? ''}"
-></div>
-<p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
+    <div class="section-label">Location</div>
+    <div
+      class="map-box"
+      id="hostelDetailMap"
+      data-latitude="${h.latitude ?? ''}"
+      data-longitude="${h.longitude ?? ''}"
+    ></div>
+    <p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
 
     <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
       <span>Verified Student Reviews</span>
@@ -1036,8 +1063,8 @@ function openHostelDetail(id) {
       </div>
     ` : '')}
   `, "modal-wide");
-   initializeHostelDetailMap(h);
-   loadHostelReviews(h.id);
+  initializeHostelDetailMap(h);
+  loadHostelReviews(h.id);
 }
 
 /* ---------------------- Hostel detail map ---------------------- */
@@ -1099,10 +1126,9 @@ function initializeHostelDetailMap(hostel) {
     map.resize();
   });
 
-  
-map.on("error", () => {
-  console.error("Hostel detail map encountered a loading error.");
-});
+  map.on("error", () => {
+    console.error("Hostel detail map encountered a loading error.");
+  });
 
 // Directions controls, displayed below the MapLibre map.
 const directionsPanel = document.createElement("div");
@@ -2237,8 +2263,12 @@ const ACTIONS = {
   "go-landing-login": () => goLandingLogin(),
   "go-landing-signup": () => goLandingSignup(),
   "go-owner-portal": () => goOwnerPortal(),
+  "return-to-app": () => enterApp(),
   "browse-guest": () => browseGuest(),
-  "back-to-landing": () => showLandingScreen(),
+  "back-to-landing": (id, btn, e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    showLandingScreen();
+  },
   "toggle-mobile-nav": () => toggleMobileNav(),
   "view-hostel-preview": (id) => viewHostelFromLanding(id),
   "switch-auth-mode": (id) => switchAuthMode(id),
@@ -2285,6 +2315,15 @@ document.addEventListener("click", (e) => {
     $all("#reviewStarPicker [data-star]").forEach(s => {
       s.style.color = Number(s.dataset.star) <= val ? "#f59e0b" : "var(--text-faint)";
     });
+  }
+
+  const footerAction = e.target.closest("[data-footer-action]");
+  if (footerAction) {
+    const act = footerAction.dataset.footerAction;
+    if (act === "backtop" || act === "home") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   const el = e.target.closest("[data-action]");
@@ -2357,6 +2396,14 @@ function initFooter() {
 
 async function init() {
   try {
+    const footerYr = document.getElementById("footerYear");
+    if (footerYr) footerYr.textContent = new Date().getFullYear();
+    if (localStorage.getItem("hostelhub_theme") === "light") {
+      document.body.classList.add("light-theme");
+      $all('[data-action="toggle-theme"]').forEach(btn => { btn.textContent = "🌙"; });
+    }
+  } catch (_) {}
+  try {
     const meta = await api("/meta");
     COLLEGES = meta.colleges;
     AMENITY_DEFS = meta.amenities;
@@ -2376,15 +2423,14 @@ async function init() {
   showLandingScreen();
 }
 
-
 document.addEventListener("DOMContentLoaded", () => {
   init();
   initFooter();
   initLandingScrollReveal();
+  initHeroBackground();
 
   // Close the mobile nav drawer after tapping a section anchor (#find, #how, ...)
   const navLinks = document.getElementById("landingNavLinks");
-
   if (navLinks) {
     navLinks.querySelectorAll("a").forEach((link) => {
       link.addEventListener("click", closeMobileNav);
@@ -2489,5 +2535,3 @@ function initHeroBackground() {
     targetX = hero.clientWidth / 2; targetY = hero.clientHeight / 2;
   });
 }
-
-document.addEventListener("DOMContentLoaded", initHeroBackground);
