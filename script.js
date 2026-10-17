@@ -51,6 +51,7 @@ function emptyState() {
     authMode: "login", // "login" | "signup" — only meaningful while screen === "auth"
     guestBrowsing: false,
     pendingContactHostelId: null,
+    pendingContactAction: null,
     ownerSubtab: "listings",
     adminSubtab: "approval",
     studentSubtab: "find",
@@ -333,6 +334,13 @@ function renderAuthCard() {
   const backLink = `<div class="auth-back-link"><a href="#" data-action="back-to-landing">← Back to HostelHub</a></div>`;
 
 
+  const pendingHostel = state.pendingContactHostelId ? findHostel(state.pendingContactHostelId) : null;
+  const pendingNotice = pendingHostel ? `
+    <div style="background:var(--gold-dim); border:1px solid var(--gold-soft); color:var(--gold-text); border-radius:var(--radius-sm); padding:10px 14px; margin: -10px 0 18px; font-size:13px; text-align:center; line-height:1.5;">
+      ℹ️ Please log in to contact the owner of <strong>${esc(pendingHostel.name)}</strong>.
+    </div>
+  ` : "";
+
   let cardHTML;
   if (isSignup) {
     cardHTML = `
@@ -340,6 +348,7 @@ function renderAuthCard() {
         <div class="auth-icon">➕</div>
         <h1 class="auth-title">${esc(copy.signupTitle)}</h1>
         <p class="auth-subtitle">${esc(copy.signupSubtitle)}</p>
+        ${pendingNotice}
 
         <div class="field-group"><label for="signupName">Full Name *</label><input type="text" id="signupName" placeholder="e.g. Rahul Sharma" /></div>
         <div class="field-group"><label for="signupUsername">Username *</label><input type="text" id="signupUsername" placeholder="Choose a username" /></div>
@@ -362,6 +371,7 @@ function renderAuthCard() {
         <div class="auth-icon">${copy.icon}</div>
         <h1 class="auth-title">${esc(copy.loginTitle)}</h1>
         <p class="auth-subtitle">${esc(copy.loginSubtitle)}</p>
+        ${pendingNotice}
 
         <div class="field-group"><label for="loginUsername">Username</label><input type="text" id="loginUsername" placeholder="Enter your username" autocomplete="username" /></div>
         <div class="field-group"><label for="loginPassword">Password</label>
@@ -503,6 +513,7 @@ async function logout() {
   state.currentUser = null;
   state.guestBrowsing = false;
   state.pendingContactHostelId = null;
+  state.pendingContactAction = null;
   showLandingScreen();
 }
 
@@ -1020,12 +1031,12 @@ function openHostelDetail(id) {
       <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-gold btn-sm" data-action="contact-owner" data-id="${h.id}">📩 Send App Inquiry</button>
         ${cleanPhone ? `
-          <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hi, I saw your listing for ${h.name} on HostelHub. Is a room currently available?`)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+          <button type="button" class="btn btn-whatsapp btn-sm" data-action="contact-whatsapp" data-id="${h.id}" style="text-decoration:none;">
             <span>💬</span> WhatsApp
-          </a>
-          <a href="tel:${cleanPhone}" class="btn btn-sm btn-outline" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" data-action="contact-call" data-id="${h.id}" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
             <span>📞</span> Call
-          </a>
+          </button>
         ` : ''}
       </div>
     </div>
@@ -1266,12 +1277,76 @@ directionsButton.addEventListener("click", () => {
 window.hostelHubDetailMap = map;
 }
 
+function getOwnerPhoneForHostel(hostelId) {
+  const h = findHostel(hostelId);
+  if (!h) return "";
+  const owner = findUser(h.ownerId);
+  const phone = h.ownerPhone || (owner ? owner.phone : "");
+  return String(phone || "").replace(/\D/g, "");
+}
+
+function getWhatsAppUrlForHostel(hostelId) {
+  const h = findHostel(hostelId);
+  if (!h) return "";
+  const cleanPhone = getOwnerPhoneForHostel(hostelId);
+  if (!cleanPhone) return "";
+  const message = `Hi, I saw your listing for ${h.name} on HostelHub. Is a room currently available?`;
+  return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
+}
+
+function requireLoginForContact(hostelId, actionType = "inquiry") {
+  state.pendingContactHostelId = Number(hostelId);
+  state.pendingContactAction = actionType;
+  closeModal();
+  showToast("Please log in to contact the hostel owner.", "default");
+  showAuthScreen("student", "login");
+}
+
+function handleContactInquiry(hostelId) {
+  if (!state.currentUser) {
+    requireLoginForContact(hostelId, "inquiry");
+    return;
+  }
+  contactOwner(hostelId);
+}
+
+function handleContactWhatsApp(hostelId) {
+  if (!state.currentUser) {
+    requireLoginForContact(hostelId, "whatsapp");
+    return;
+  }
+  const url = getWhatsAppUrlForHostel(hostelId);
+  if (url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } else {
+    showToast("Hostel owner phone number is not available.", "error");
+  }
+}
+
+function handleContactCall(hostelId) {
+  if (!state.currentUser) {
+    requireLoginForContact(hostelId, "call");
+    return;
+  }
+  const cleanPhone = getOwnerPhoneForHostel(hostelId);
+  if (cleanPhone) {
+    window.location.href = `tel:${cleanPhone}`;
+  } else {
+    showToast("Hostel owner phone number is not available.", "error");
+  }
+}
+
 async function contactOwner(hostelId) {
   if (!state.currentUser) {
-    openAuthGateModal(hostelId);
+    requireLoginForContact(hostelId, "inquiry");
+    return;
+  }
+  if (state.currentUser.role !== "student") {
+    showToast("Only students can send inquiries to hostel owners.", "error");
     return;
   }
   const h = findHostel(hostelId);
+  if (!h) return;
 
   let data;
   try {
@@ -1292,12 +1367,12 @@ async function contactOwner(hostelId) {
       </div>
       <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
         ${cleanPhone ? `
-          <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hi, I saw your listing on HostelHub. Is a room currently available?`)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+          <button type="button" class="btn btn-whatsapp btn-sm" data-action="contact-whatsapp" data-id="${h.id}" style="text-decoration:none;">
             <span>💬</span> WhatsApp Owner
-          </a>
-          <a href="tel:${cleanPhone}" class="btn btn-sm btn-outline" style="text-decoration:none;">
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" data-action="contact-call" data-id="${h.id}" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
             <span>📞</span> Call
-          </a>
+          </button>
         ` : ''}
       </div>`;
   }
@@ -1313,26 +1388,7 @@ async function contactOwner(hostelId) {
 }
 
 function openAuthGateModal(hostelId) {
-  const h = findHostel(hostelId);
-  state.pendingContactHostelId = hostelId;
-  openModal(`
-    <div class="modal-header">
-      <h2 class="modal-title">Contact ${esc(h.name)}'s owner</h2>
-      <button class="modal-close" data-action="close-modal">✕</button>
-    </div>
-    <p style="color:var(--text-dim); font-size:13.5px; line-height:1.6;">
-      You'll need a free student account before messaging an owner — this keeps enquiries genuine.
-      Your enquiry will be sent automatically right after you sign in or create one.
-    </p>
-    <div class="auth-gate-options">
-      <button class="auth-gate-option" data-action="resume-login">
-        <span class="ago-icon">🔑</span><b>I have an account</b><span>Log in and send</span>
-      </button>
-      <button class="auth-gate-option" data-action="resume-signup">
-        <span class="ago-icon">➕</span><b>I'm new here</b><span>Create a free account</span>
-      </button>
-    </div>
-  `);
+  requireLoginForContact(hostelId, "inquiry");
 }
 
 function resumeLogin() {
@@ -1347,10 +1403,21 @@ function resumeSignup() {
 function resumeAfterAuth() {
   if (!state.pendingContactHostelId) return;
   const id = state.pendingContactHostelId;
+  const action = state.pendingContactAction || "inquiry";
   state.pendingContactHostelId = null;
-  contactOwner(id);
+  state.pendingContactAction = null;
+
   state.studentSubtab = "find";
   navigate("find");
+  openHostelDetail(id);
+
+  if (action === "inquiry") {
+    contactOwner(id);
+  } else if (action === "whatsapp") {
+    handleContactWhatsApp(id);
+  } else if (action === "call") {
+    handleContactCall(id);
+  }
 }
 
 function openCompareModal() {
@@ -2286,7 +2353,9 @@ const ACTIONS = {
   "view-hostel": (id) => openHostelDetail(id),
   "view-hostel-from-compare": (id) => openHostelDetail(id),
   "compare-now": () => openCompareModal(),
-  "contact-owner": (id) => contactOwner(id),
+  "contact-owner": (id) => handleContactInquiry(id),
+  "contact-whatsapp": (id) => handleContactWhatsApp(id),
+  "contact-call": (id) => handleContactCall(id),
   "close-modal": () => closeModal(),
   "add-listing": () => openListingModal(),
   "edit-listing": (id) => openListingModal(id),
