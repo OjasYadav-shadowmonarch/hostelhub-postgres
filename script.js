@@ -10,14 +10,36 @@
 /* ---------------------- API helper ---------------------- */
 
 async function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+
   const opts = {
-    method: options.method || "GET",
+    method,
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin"
   };
-  if (options.body !== undefined) opts.body = JSON.stringify(options.body);
 
-  let res, data;
+  if (options.body !== undefined) {
+    opts.body = JSON.stringify(options.body);
+  }
+
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    const tokenResponse = await fetch("/api/csrf-token", {
+      method: "GET",
+      credentials: "same-origin"
+    });
+
+    const tokenData = await tokenResponse.json().catch(() => ({}));
+
+    if (!tokenResponse.ok || !tokenData.csrf_token) {
+      throw new Error("Could not initialize security token. Please refresh and try again.");
+    }
+
+    opts.headers["X-CSRF-Token"] = tokenData.csrf_token;
+  }
+
+  let res;
+  let data;
+
   try {
     res = await fetch("/api" + path, opts);
     data = await res.json().catch(() => ({}));
@@ -25,15 +47,19 @@ async function api(path, options = {}) {
     showToast("Couldn't reach the backend. Is app.py running?", "error");
     throw netErr;
   }
+
   if (!res.ok) {
-    const message = data && data.error ? data.error : "Something went wrong.";
+    const message = data && data.error
+      ? data.error
+      : "Something went wrong.";
+
     const err = new Error(message);
     err.status = res.status;
     throw err;
   }
+
   return data;
 }
-
 /* ---------------------- Config (from backend) ---------------------- */
 
 // Populated by loadMeta() on startup — see init() near the bottom of this file.
