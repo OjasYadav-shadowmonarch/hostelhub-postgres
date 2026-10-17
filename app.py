@@ -460,9 +460,16 @@ def current_user():
     uid = session.get("user_id")
     if not uid:
         return None
-    row = get_db().execute("SELECT * FROM users WHERE id=%s", (uid,)).fetchone()
-    return row
 
+    row = get_db().execute(
+        "SELECT * FROM users WHERE id=%s AND status='active'",
+        (uid,),
+    ).fetchone()
+
+    if not row:
+        session.clear()
+
+    return row
 
 def error(message, code=400):
     return jsonify({"error": message}), code
