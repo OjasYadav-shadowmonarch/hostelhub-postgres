@@ -959,9 +959,11 @@ def api_reject_hostel(hostel_id):
 
 @app.post("/api/hostels/<int:hostel_id>/contact")
 def api_contact_owner(hostel_id):
-    user, err = require_role("student")
-    if err:
-        return err
+    user = current_user()
+    if not user:
+        return error("Please log in to contact the hostel owner.", 401)
+    if user["role"] != "student":
+        return error("Only students can send inquiries to hostel owners.", 403)
     db = get_db()
     h = hostel_or_404(db, hostel_id)
     if not h:
