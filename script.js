@@ -495,17 +495,13 @@ async function handleSignup() {
     return;
   }
 
-  
-  errorEl.textContent = data.message || "Your account was created. Check your email for the verification link.";
-  errorEl.hidden = false;
-  errorEl.classList.remove("error");
-  errorEl.classList.add("success");
-
-  const signupButton = document.querySelector('[data-action="signup"]');
-  if (signupButton) {
-    signupButton.disabled = true;
-    signupButton.textContent = "Account Created";
-  }
+  await refreshState();
+  state.currentUser = data.user;
+  state.guestBrowsing = false;
+  const hadPendingContact = !!state.pendingContactHostelId;
+  if (!hadPendingContact) showToast(`Welcome to HostelHub, ${name.split(" ")[0]}!`, "success");
+  enterApp();
+  if (hadPendingContact) resumeAfterAuth();
 }
 
 function switchPortal(role) {
