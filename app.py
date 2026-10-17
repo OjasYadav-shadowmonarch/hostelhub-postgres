@@ -75,7 +75,7 @@ def api_csrf_token():
         token = secrets.token_urlsafe(32)
         session["csrf_token"] = token
     return jsonify({"csrf_token": token})
-  def csrf_is_valid():
+def csrf_is_valid():
     expected = session.get("csrf_token")
     supplied = request.headers.get("X-CSRF-Token", "")
 
