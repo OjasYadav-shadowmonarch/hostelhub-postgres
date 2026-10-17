@@ -550,6 +550,7 @@ function enterApp() {
   $("#navRoleTag").textContent = state.guestBrowsing ? "Guest" : (user.role[0].toUpperCase() + user.role.slice(1));
 
   buildNav();
+  closeAppMobileNav();
   renderNavRight();
 
   if (portal === "student") navigate("find");
@@ -559,6 +560,28 @@ function enterApp() {
 
 function currentRole() {
   return state.guestBrowsing ? "student" : (state.currentUser ? state.currentUser.role : "student");
+}
+
+function toggleAppMobileNav() {
+  const menu = document.getElementById("appMobileMenu");
+  const tabs = document.getElementById("navTabs");
+  if (!menu || !tabs) return;
+
+  const isOpen = tabs.classList.toggle("mobile-menu-open");
+  menu.setAttribute("aria-expanded", String(isOpen));
+  menu.setAttribute("aria-label", isOpen ? "Close navigation menu" : "Open navigation menu");
+  menu.textContent = isOpen ? "✕" : "☰";
+}
+
+function closeAppMobileNav() {
+  const menu = document.getElementById("appMobileMenu");
+  const tabs = document.getElementById("navTabs");
+  if (!menu || !tabs) return;
+
+  tabs.classList.remove("mobile-menu-open");
+  menu.setAttribute("aria-expanded", "false");
+  menu.setAttribute("aria-label", "Open navigation menu");
+  menu.textContent = "☰";
 }
 
 function buildNav() {
@@ -2342,7 +2365,7 @@ const ACTIONS = {
   "switch-portal": (id) => switchPortal(id),
   "resume-login": () => resumeLogin(),
   "resume-signup": () => resumeSignup(),
-  "nav": (id, btn) => navigate(btn.dataset.view),
+  "nav": (id, btn) => {   navigate(btn.dataset.view);   closeAppMobileNav(); },
   "owner-subtab": (id) => ownerSubtabSwitch(id),
   "admin-subtab": (id) => adminSubtabSwitch(id),
   "run-search": () => runSearch(),
@@ -2376,6 +2399,10 @@ const ACTIONS = {
 };
 
 document.addEventListener("click", (e) => {
+     if (e.target.closest("#appMobileMenu")) {
+    toggleAppMobileNav();
+    return;
+  }
   const star = e.target.closest("#reviewStarPicker [data-star]");
   if (star) {
     const val = Number(star.dataset.star);
