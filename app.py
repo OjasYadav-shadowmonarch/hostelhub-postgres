@@ -55,7 +55,12 @@ def env_bool(name, default=False):
 
 
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.environ.get("SECRET_KEY") or "roomfinder-dev-secret-change-me"
+SECRET_KEY = os.environ.get("SECRET_KEY")
+
+if not SECRET_KEY and os.environ.get("RENDER"):
+    raise RuntimeError("SECRET_KEY must be configured in the production environment.")
+
+app.secret_key = SECRET_KEY or "roomfinder-dev-secret-change-me"
 
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
