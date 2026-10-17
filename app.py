@@ -21,12 +21,8 @@ only the storage layer changed.
 import requests
 import os
 import re
-import smtplib
-import ssl
-from email.message import EmailMessage
-from datetime import date, datetime, timedelta, timezone
-import hashlib
-import secrets
+from datetime import date, datetime
+
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
@@ -60,120 +56,7 @@ def env_bool(name, default=False):
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("SECRET_KEY") or "roomfinder-dev-secret-change-me"
-def send_resend_email(to_email, subject, html):
-    """Send an HTML email using Gmail SMTP."""
 
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_email = os.environ.get("SMTP_EMAIL", "").strip()
-    smtp_password = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
-
-    if not smtp_email or not smtp_password:
-        app.logger.error(
-            "Email sending is not configured: missing SMTP settings."
-        )
-        return False
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = f"HostelHub <{smtp_email}>"
-    message["To"] = to_email
-
-    message.set_content(
-        "This email contains HTML content. "
-        "Please view it in an HTML-compatible email application."
-    )
-    message.add_alternative(html, subtype="html")
-
-    try:
-        context = ssl.create_default_context()
-
-        with smtplib.SMTP(
-            smtp_host, smtp_port, timeout=20
-        ) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.ehlo()
-            server.login(smtp_email, smtp_password)
-            server.send_message(message)
-
-        return True
-
-    except (smtplib.SMTPException, OSError, ValueError) as exc:
-        app.logger.error(
-            "Gmail SMTP email delivery failed (%s).",
-            type(exc).__name__,
-        )
-        return False
-def send_verification_email(user_id, to_email, name):
-    """Create and email a one-time verification link."""
-
-    token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
-
-    base_url = os.environ.get(
-        "APP_BASE_URL",
-        "https://hostelhub-postgres.onrender.com",
-    ).strip().rstrip("/")
-
-    db = get_db()
-    db.execute(
-        """
-        UPDATE users
-        SET email_verified = FALSE,
-            email_verification_token_hash = %s,
-            email_verification_expires_at = %s,
-            email_verified_at = NULL
-        WHERE id = %s
-        """,
-        (token_hash, expires_at, user_id),
-    )
-    db.commit()
-
-    verification_url = (
-        f"{base_url}/api/auth/verify-email?token={token}"
-    )
-
-    safe_name = (
-        str(name)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#x27;")
-    )
-
-    html = f"""
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2>Verify your HostelHub email</h2>
-      <p>Hello {safe_name},</p>
-      <p>Please verify your email address to activate your HostelHub account.</p>
-      <p>
-        <a href="{verification_url}"
-           style="display:inline-block;padding:12px 20px;background:#111827;
-                  color:#ffffff;text-decoration:none;border-radius:6px">
-          Verify email
-        </a>
-      </p>
-      <p>This link expires in 30 minutes and can only be used once.</p>
-      <p>If you did not create this account, you can ignore this email.</p>
-    </div>
-    """
-
-    sent = send_resend_email(
-        to_email,
-        "Verify your HostelHub email",
-        html,
-    )
-
-    if not sent:
-        app.logger.error(
-            "Verification email could not be sent for user_id=%s.",
-            user_id,
-        )
-
-    return sent      
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
 # ---------------------------------------------------------------- #
@@ -296,28 +179,8 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK(role IN ('student','owner','admin')),
     joined DATE NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
-    password_hash TEXT NOT NULL,
-    email_verified BOOLEAN NOT NULL DEFAULT TRUE,
-    email_verification_token_hash TEXT,
-    email_verification_expires_at TIMESTAMPTZ,
-    email_verified_at TIMESTAMPTZ,
-    email_verification_last_sent_at TIMESTAMPTZ
+    password_hash TEXT NOT NULL
 );
-
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE;
-
-ALTER TABLE users
-ALTER COLUMN email_verified SET DEFAULT FALSE;
-
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS email_verification_token_hash TEXT;
-
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ;
-
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS hostels (
     id SERIAL PRIMARY KEY,
@@ -758,21 +621,14 @@ def api_login():
 
     if row["status"] == "inactive":
         return error("This account has been deactivated. Contact an administrator.")
-        # Only the configured administrator bypasses email verification.
+
+    # Only the administrator configured in the server environment
+    # may bypass the portal-role match check.
     is_configured_admin = (
         bool(ADMIN_USERNAME)
         and row["role"] == "admin"
         and row["username"].lower() == ADMIN_USERNAME.lower()
     )
-
-    if not is_configured_admin and not row["email_verified"]:
-        return error(
-            "Please verify your email before logging in. "
-            "Check your inbox for the verification link.",
-            403,
-        )    
-
-    # Only the administrator configured in the server environment
 
     if row["role"] == "admin" and not is_configured_admin:
         return error("This administrator account is not authorized.", 403)
@@ -840,16 +696,12 @@ def api_signup():
     if existing:
         return error("That username is already taken.")
 
-    
     try:
         cur = db.execute(
-            """
-            INSERT INTO users
-                (name, username, email, phone, role, joined,
-                 status, password_hash, email_verified)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE)
-            RETURNING id
-            """,
+            "INSERT INTO users "
+            "(name, username, email, phone, role, joined, status, password_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+            "RETURNING id",
             (
                 name,
                 username,
@@ -861,110 +713,21 @@ def api_signup():
                 generate_password_hash(password),
             ),
         )
-        new_id = cur.fetchone()["id"]
-        db.commit()
-
     except pg_errors.UniqueViolation:
         db.rollback()
         return error("That username is already taken.")
 
+    new_id = cur.fetchone()["id"]
+    db.commit()
 
-    email_sent = send_verification_email(
-        new_id,
-        email,
-        name,
-    )
+    row = db.execute(
+        "SELECT * FROM users WHERE id=%s",
+        (new_id,),
+    ).fetchone()
 
-    if not email_sent:
-        return jsonify({
-            "message": (
-                "Your account was created, but we couldn't send the "
-                "verification email. Please try again later or contact support."
-            ),
-            "verification_email_sent": False,
-        }), 201
+    session["user_id"] = row["id"]
 
-    return jsonify({
-        "message": (
-            "Account created. Check your email and click the "
-            "verification link before logging in."
-        ),
-        "verification_email_sent": True,
-    }), 201
-
-@app.get("/api/auth/verify-email")
-def api_verify_email():
-    token = (request.args.get("token") or "").strip()
-
-    if not token:
-        return (
-            "Verification link is missing. Please open the link from your email.",
-            400,
-            {"Content-Type": "text/plain; charset=utf-8"},
-        )
-
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    db = get_db()
-
-    try:
-        row = db.execute(
-            """
-            UPDATE users
-            SET email_verified = TRUE,
-                email_verified_at = NOW(),
-                email_verification_token_hash = NULL,
-                email_verification_expires_at = NULL
-            WHERE email_verification_token_hash = %s
-              AND email_verification_expires_at > NOW()
-              AND email_verified = FALSE
-            RETURNING id, name, email
-            """,
-            (token_hash,),
-        ).fetchone()
-
-        if not row:
-            db.rollback()
-            return (
-                "This verification link is invalid, expired, or already used. "
-                "Please request a new verification email.",
-                400,
-                {"Content-Type": "text/plain; charset=utf-8"},
-            )
-
-        db.commit()
-
-    except Exception:
-        db.rollback()
-        app.logger.exception("Email verification failed.")
-        return (
-            "We couldn't verify your email right now. Please try again later.",
-            500,
-            {"Content-Type": "text/plain; charset=utf-8"},
-        )
-
-    welcome_html = """
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-      <h2>Welcome to HostelHub!</h2>
-      <p>Your email has been verified successfully.</p>
-      <p>You can now log in to your HostelHub account.</p>
-      <p>Thank you for joining HostelHub.</p>
-    </div>
-    """
-
-    send_resend_email(
-        row["email"],
-        "Welcome to HostelHub",
-        welcome_html,
-    )
-
-    return (
-        "Email verified successfully! You can now log in to HostelHub.",
-        200,
-        {"Content-Type": "text/plain; charset=utf-8"},
-    )
-
-
-    
+    return jsonify({"user": user_public(row)}), 201
 @app.post("/api/auth/logout")
 def api_logout():
     session.clear()
@@ -1196,9 +959,11 @@ def api_reject_hostel(hostel_id):
 
 @app.post("/api/hostels/<int:hostel_id>/contact")
 def api_contact_owner(hostel_id):
-    user, err = require_role("student")
-    if err:
-        return err
+    user = current_user()
+    if not user:
+        return error("Please log in to contact the hostel owner.", 401)
+    if user["role"] != "student":
+        return error("Only students can send inquiries to hostel owners.", 403)
     db = get_db()
     h = hostel_or_404(db, hostel_id)
     if not h:
@@ -1398,7 +1163,7 @@ def api_toggle_wishlist(hostel_id):
         db.execute("DELETE FROM wishlists WHERE id=%s", (row["id"],))
         saved = False
     else:
-        db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s)", (user["id"], hostel_id))
+        db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s) ON CONFLICT (student_id, hostel_id) DO NOTHING", (user["id"], hostel_id))
         saved = True
     db.commit()
     return jsonify({"ok": True, "saved": saved, "hostelId": hostel_id})

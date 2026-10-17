@@ -51,6 +51,7 @@ function emptyState() {
     authMode: "login", // "login" | "signup" — only meaningful while screen === "auth"
     guestBrowsing: false,
     pendingContactHostelId: null,
+    pendingContactAction: null,
     ownerSubtab: "listings",
     adminSubtab: "approval",
     studentSubtab: "find",
@@ -161,13 +162,38 @@ const PORTAL_COPY = {
 };
 
 function showLandingScreen() {
+  closeModal();
   state.screen = "landing";
   $("#landingScreen").hidden = false;
   $("#authScreen").hidden = true;
   $("#mainApp").hidden = true;
   renderLandingStats();
   renderLandingPreview();
+  renderLandingNavActions();
   closeMobileNav();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderLandingNavActions() {
+  const container = $("#landingNavActions");
+  if (!container) return;
+  const isLight = document.body.classList.contains("light-theme");
+  const themeIcon = isLight ? "🌙" : "☀️";
+  if (state.currentUser) {
+    const role = state.currentUser.role;
+    const roleLabel = role === "admin" ? "Admin Panel" : (role === "owner" ? "Owner Dashboard" : "Find Hostels");
+    container.innerHTML = `
+      <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">${themeIcon}</button>
+      <button class="btn btn-ghost" data-action="logout">Sign Out</button>
+      <button class="btn btn-gold" data-action="return-to-app">Go to ${roleLabel} →</button>
+    `;
+  } else {
+    container.innerHTML = `
+      <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">${themeIcon}</button>
+      <button class="btn btn-ghost" data-action="go-landing-login">Log In</button>
+      <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
+    `;
+  }
 }
 
 function renderLandingStats() {
@@ -308,6 +334,13 @@ function renderAuthCard() {
   const backLink = `<div class="auth-back-link"><a href="#" data-action="back-to-landing">← Back to HostelHub</a></div>`;
 
 
+  const pendingHostel = state.pendingContactHostelId ? findHostel(state.pendingContactHostelId) : null;
+  const pendingNotice = pendingHostel ? `
+    <div style="background:var(--gold-dim); border:1px solid var(--gold-soft); color:var(--gold-text); border-radius:var(--radius-sm); padding:10px 14px; margin: -10px 0 18px; font-size:13px; text-align:center; line-height:1.5;">
+      ℹ️ Please log in to contact the owner of <strong>${esc(pendingHostel.name)}</strong>.
+    </div>
+  ` : "";
+
   let cardHTML;
   if (isSignup) {
     cardHTML = `
@@ -315,6 +348,7 @@ function renderAuthCard() {
         <div class="auth-icon">➕</div>
         <h1 class="auth-title">${esc(copy.signupTitle)}</h1>
         <p class="auth-subtitle">${esc(copy.signupSubtitle)}</p>
+        ${pendingNotice}
 
         <div class="field-group"><label for="signupName">Full Name *</label><input type="text" id="signupName" placeholder="e.g. Rahul Sharma" /></div>
         <div class="field-group"><label for="signupUsername">Username *</label><input type="text" id="signupUsername" placeholder="Choose a username" /></div>
@@ -337,6 +371,7 @@ function renderAuthCard() {
         <div class="auth-icon">${copy.icon}</div>
         <h1 class="auth-title">${esc(copy.loginTitle)}</h1>
         <p class="auth-subtitle">${esc(copy.loginSubtitle)}</p>
+        ${pendingNotice}
 
         <div class="field-group"><label for="loginUsername">Username</label><input type="text" id="loginUsername" placeholder="Enter your username" autocomplete="username" /></div>
         <div class="field-group"><label for="loginPassword">Password</label>
@@ -460,17 +495,13 @@ async function handleSignup() {
     return;
   }
 
-  
-  errorEl.textContent = data.message || "Your account was created. Check your email for the verification link.";
-  errorEl.hidden = false;
-  errorEl.classList.remove("error");
-  errorEl.classList.add("success");
-
-  const signupButton = document.querySelector('[data-action="signup"]');
-  if (signupButton) {
-    signupButton.disabled = true;
-    signupButton.textContent = "Account Created";
-  }
+  await refreshState();
+  state.currentUser = data.user;
+  state.guestBrowsing = false;
+  const hadPendingContact = !!state.pendingContactHostelId;
+  if (!hadPendingContact) showToast(`Welcome to HostelHub, ${name.split(" ")[0]}!`, "success");
+  enterApp();
+  if (hadPendingContact) resumeAfterAuth();
 }
 
 function switchPortal(role) {
@@ -482,6 +513,7 @@ async function logout() {
   state.currentUser = null;
   state.guestBrowsing = false;
   state.pendingContactHostelId = null;
+  state.pendingContactAction = null;
   showLandingScreen();
 }
 
@@ -518,6 +550,7 @@ function enterApp() {
   $("#navRoleTag").textContent = state.guestBrowsing ? "Guest" : (user.role[0].toUpperCase() + user.role.slice(1));
 
   buildNav();
+  closeAppMobileNav();
   renderNavRight();
 
   if (portal === "student") navigate("find");
@@ -527,6 +560,28 @@ function enterApp() {
 
 function currentRole() {
   return state.guestBrowsing ? "student" : (state.currentUser ? state.currentUser.role : "student");
+}
+
+function toggleAppMobileNav() {
+  const menu = document.getElementById("appMobileMenu");
+  const tabs = document.getElementById("navTabs");
+  if (!menu || !tabs) return;
+
+  const isOpen = tabs.classList.toggle("mobile-menu-open");
+  menu.setAttribute("aria-expanded", String(isOpen));
+  menu.setAttribute("aria-label", isOpen ? "Close navigation menu" : "Open navigation menu");
+  menu.textContent = isOpen ? "✕" : "☰";
+}
+
+function closeAppMobileNav() {
+  const menu = document.getElementById("appMobileMenu");
+  const tabs = document.getElementById("navTabs");
+  if (!menu || !tabs) return;
+
+  tabs.classList.remove("mobile-menu-open");
+  menu.setAttribute("aria-expanded", "false");
+  menu.setAttribute("aria-label", "Open navigation menu");
+  menu.textContent = "☰";
 }
 
 function buildNav() {
@@ -601,8 +656,11 @@ function navigate(view) {
 
 function toggleTheme() {
   document.body.classList.toggle("light-theme");
-  const btn = $('[data-action="toggle-theme"]');
-  if (btn) btn.textContent = document.body.classList.contains("light-theme") ? "🌙" : "☀️";
+  const isLight = document.body.classList.contains("light-theme");
+  try { localStorage.setItem("hostelhub_theme", isLight ? "light" : "dark"); } catch (_) {}
+  $all('[data-action="toggle-theme"]').forEach(btn => {
+    btn.textContent = isLight ? "🌙" : "☀️";
+  });
 }
 
 /* ---------------------- Shared components ---------------------- */
@@ -996,25 +1054,24 @@ function openHostelDetail(id) {
       <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-gold btn-sm" data-action="contact-owner" data-id="${h.id}">📩 Send App Inquiry</button>
         ${cleanPhone ? `
-          <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hi, I saw your listing for ${h.name} on HostelHub. Is a room currently available?`)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+          <button type="button" class="btn btn-whatsapp btn-sm" data-action="contact-whatsapp" data-id="${h.id}" style="text-decoration:none;">
             <span>💬</span> WhatsApp
-          </a>
-          <a href="tel:${cleanPhone}" class="btn btn-sm btn-outline" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" data-action="contact-call" data-id="${h.id}" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
             <span>📞</span> Call
-          </a>
+          </button>
         ` : ''}
       </div>
     </div>
 
-    
-<div class="section-label">Location</div>
-<div
-  class="map-box"
-  id="hostelDetailMap"
-  data-latitude="${h.latitude ?? ''}"
-  data-longitude="${h.longitude ?? ''}"
-></div>
-<p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
+    <div class="section-label">Location</div>
+    <div
+      class="map-box"
+      id="hostelDetailMap"
+      data-latitude="${h.latitude ?? ''}"
+      data-longitude="${h.longitude ?? ''}"
+    ></div>
+    <p style="color:var(--text-dim); font-size:12.5px; margin-top:6px;">${esc(h.location)} · ${h.distance}km from ${esc(h.college)}</p>
 
     <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
       <span>Verified Student Reviews</span>
@@ -1040,8 +1097,8 @@ function openHostelDetail(id) {
       </div>
     ` : '')}
   `, "modal-wide");
-   initializeHostelDetailMap(h);
-   loadHostelReviews(h.id);
+  initializeHostelDetailMap(h);
+  loadHostelReviews(h.id);
 }
 
 /* ---------------------- Hostel detail map ---------------------- */
@@ -1103,10 +1160,9 @@ function initializeHostelDetailMap(hostel) {
     map.resize();
   });
 
-  
-map.on("error", () => {
-  console.error("Hostel detail map encountered a loading error.");
-});
+  map.on("error", () => {
+    console.error("Hostel detail map encountered a loading error.");
+  });
 
 // Directions controls, displayed below the MapLibre map.
 const directionsPanel = document.createElement("div");
@@ -1244,12 +1300,76 @@ directionsButton.addEventListener("click", () => {
 window.hostelHubDetailMap = map;
 }
 
+function getOwnerPhoneForHostel(hostelId) {
+  const h = findHostel(hostelId);
+  if (!h) return "";
+  const owner = findUser(h.ownerId);
+  const phone = h.ownerPhone || (owner ? owner.phone : "");
+  return String(phone || "").replace(/\D/g, "");
+}
+
+function getWhatsAppUrlForHostel(hostelId) {
+  const h = findHostel(hostelId);
+  if (!h) return "";
+  const cleanPhone = getOwnerPhoneForHostel(hostelId);
+  if (!cleanPhone) return "";
+  const message = `Hi, I saw your listing for ${h.name} on HostelHub. Is a room currently available?`;
+  return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
+}
+
+function requireLoginForContact(hostelId, actionType = "inquiry") {
+  state.pendingContactHostelId = Number(hostelId);
+  state.pendingContactAction = actionType;
+  closeModal();
+  showToast("Please log in to contact the hostel owner.", "default");
+  showAuthScreen("student", "login");
+}
+
+function handleContactInquiry(hostelId) {
+  if (!state.currentUser) {
+    requireLoginForContact(hostelId, "inquiry");
+    return;
+  }
+  contactOwner(hostelId);
+}
+
+function handleContactWhatsApp(hostelId) {
+  if (!state.currentUser) {
+    requireLoginForContact(hostelId, "whatsapp");
+    return;
+  }
+  const url = getWhatsAppUrlForHostel(hostelId);
+  if (url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } else {
+    showToast("Hostel owner phone number is not available.", "error");
+  }
+}
+
+function handleContactCall(hostelId) {
+  if (!state.currentUser) {
+    requireLoginForContact(hostelId, "call");
+    return;
+  }
+  const cleanPhone = getOwnerPhoneForHostel(hostelId);
+  if (cleanPhone) {
+    window.location.href = `tel:${cleanPhone}`;
+  } else {
+    showToast("Hostel owner phone number is not available.", "error");
+  }
+}
+
 async function contactOwner(hostelId) {
   if (!state.currentUser) {
-    openAuthGateModal(hostelId);
+    requireLoginForContact(hostelId, "inquiry");
+    return;
+  }
+  if (state.currentUser.role !== "student") {
+    showToast("Only students can send inquiries to hostel owners.", "error");
     return;
   }
   const h = findHostel(hostelId);
+  if (!h) return;
 
   let data;
   try {
@@ -1270,12 +1390,12 @@ async function contactOwner(hostelId) {
       </div>
       <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
         ${cleanPhone ? `
-          <a href="https://wa.me/91${cleanPhone}?text=${encodeURIComponent(`Hi, I saw your listing on HostelHub. Is a room currently available?`)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp btn-sm" style="text-decoration:none;">
+          <button type="button" class="btn btn-whatsapp btn-sm" data-action="contact-whatsapp" data-id="${h.id}" style="text-decoration:none;">
             <span>💬</span> WhatsApp Owner
-          </a>
-          <a href="tel:${cleanPhone}" class="btn btn-sm btn-outline" style="text-decoration:none;">
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" data-action="contact-call" data-id="${h.id}" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
             <span>📞</span> Call
-          </a>
+          </button>
         ` : ''}
       </div>`;
   }
@@ -1291,26 +1411,7 @@ async function contactOwner(hostelId) {
 }
 
 function openAuthGateModal(hostelId) {
-  const h = findHostel(hostelId);
-  state.pendingContactHostelId = hostelId;
-  openModal(`
-    <div class="modal-header">
-      <h2 class="modal-title">Contact ${esc(h.name)}'s owner</h2>
-      <button class="modal-close" data-action="close-modal">✕</button>
-    </div>
-    <p style="color:var(--text-dim); font-size:13.5px; line-height:1.6;">
-      You'll need a free student account before messaging an owner — this keeps enquiries genuine.
-      Your enquiry will be sent automatically right after you sign in or create one.
-    </p>
-    <div class="auth-gate-options">
-      <button class="auth-gate-option" data-action="resume-login">
-        <span class="ago-icon">🔑</span><b>I have an account</b><span>Log in and send</span>
-      </button>
-      <button class="auth-gate-option" data-action="resume-signup">
-        <span class="ago-icon">➕</span><b>I'm new here</b><span>Create a free account</span>
-      </button>
-    </div>
-  `);
+  requireLoginForContact(hostelId, "inquiry");
 }
 
 function resumeLogin() {
@@ -1325,10 +1426,21 @@ function resumeSignup() {
 function resumeAfterAuth() {
   if (!state.pendingContactHostelId) return;
   const id = state.pendingContactHostelId;
+  const action = state.pendingContactAction || "inquiry";
   state.pendingContactHostelId = null;
-  contactOwner(id);
+  state.pendingContactAction = null;
+
   state.studentSubtab = "find";
   navigate("find");
+  openHostelDetail(id);
+
+  if (action === "inquiry") {
+    contactOwner(id);
+  } else if (action === "whatsapp") {
+    handleContactWhatsApp(id);
+  } else if (action === "call") {
+    handleContactCall(id);
+  }
 }
 
 function openCompareModal() {
@@ -2241,15 +2353,19 @@ const ACTIONS = {
   "go-landing-login": () => goLandingLogin(),
   "go-landing-signup": () => goLandingSignup(),
   "go-owner-portal": () => goOwnerPortal(),
+  "return-to-app": () => enterApp(),
   "browse-guest": () => browseGuest(),
-  "back-to-landing": () => showLandingScreen(),
+  "back-to-landing": (id, btn, e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    showLandingScreen();
+  },
   "toggle-mobile-nav": () => toggleMobileNav(),
   "view-hostel-preview": (id) => viewHostelFromLanding(id),
   "switch-auth-mode": (id) => switchAuthMode(id),
   "switch-portal": (id) => switchPortal(id),
   "resume-login": () => resumeLogin(),
   "resume-signup": () => resumeSignup(),
-  "nav": (id, btn) => navigate(btn.dataset.view),
+  "nav": (id, btn) => {   navigate(btn.dataset.view);   closeAppMobileNav(); },
   "owner-subtab": (id) => ownerSubtabSwitch(id),
   "admin-subtab": (id) => adminSubtabSwitch(id),
   "run-search": () => runSearch(),
@@ -2260,7 +2376,9 @@ const ACTIONS = {
   "view-hostel": (id) => openHostelDetail(id),
   "view-hostel-from-compare": (id) => openHostelDetail(id),
   "compare-now": () => openCompareModal(),
-  "contact-owner": (id) => contactOwner(id),
+  "contact-owner": (id) => handleContactInquiry(id),
+  "contact-whatsapp": (id) => handleContactWhatsApp(id),
+  "contact-call": (id) => handleContactCall(id),
   "close-modal": () => closeModal(),
   "add-listing": () => openListingModal(),
   "edit-listing": (id) => openListingModal(id),
@@ -2281,6 +2399,10 @@ const ACTIONS = {
 };
 
 document.addEventListener("click", (e) => {
+     if (e.target.closest("#appMobileMenu")) {
+    toggleAppMobileNav();
+    return;
+  }
   const star = e.target.closest("#reviewStarPicker [data-star]");
   if (star) {
     const val = Number(star.dataset.star);
@@ -2289,6 +2411,15 @@ document.addEventListener("click", (e) => {
     $all("#reviewStarPicker [data-star]").forEach(s => {
       s.style.color = Number(s.dataset.star) <= val ? "#f59e0b" : "var(--text-faint)";
     });
+  }
+
+  const footerAction = e.target.closest("[data-footer-action]");
+  if (footerAction) {
+    const act = footerAction.dataset.footerAction;
+    if (act === "backtop" || act === "home") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   const el = e.target.closest("[data-action]");
@@ -2361,6 +2492,14 @@ function initFooter() {
 
 async function init() {
   try {
+    const footerYr = document.getElementById("footerYear");
+    if (footerYr) footerYr.textContent = new Date().getFullYear();
+    if (localStorage.getItem("hostelhub_theme") === "light") {
+      document.body.classList.add("light-theme");
+      $all('[data-action="toggle-theme"]').forEach(btn => { btn.textContent = "🌙"; });
+    }
+  } catch (_) {}
+  try {
     const meta = await api("/meta");
     COLLEGES = meta.colleges;
     AMENITY_DEFS = meta.amenities;
@@ -2380,15 +2519,14 @@ async function init() {
   showLandingScreen();
 }
 
-
 document.addEventListener("DOMContentLoaded", () => {
   init();
   initFooter();
   initLandingScrollReveal();
+  initHeroBackground();
 
   // Close the mobile nav drawer after tapping a section anchor (#find, #how, ...)
   const navLinks = document.getElementById("landingNavLinks");
-
   if (navLinks) {
     navLinks.querySelectorAll("a").forEach((link) => {
       link.addEventListener("click", closeMobileNav);
@@ -2493,5 +2631,3 @@ function initHeroBackground() {
     targetX = hero.clientWidth / 2; targetY = hero.clientHeight / 2;
   });
 }
-
-document.addEventListener("DOMContentLoaded", initHeroBackground);
