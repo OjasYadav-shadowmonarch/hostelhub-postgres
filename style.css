@@ -2652,3 +2652,50 @@ body.light-theme .profile-readonly-row span:last-child {
     gap: 5px;
   }
 }
+
+/* Admin and owner tables: mobile overflow fix */
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Keep table columns readable and actions reachable by scrolling */
+.table-wrap table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Prevent action buttons from being squeezed or clipped */
+.table-wrap th:last-child,
+.table-wrap td:last-child {
+  min-width: 76px;
+  white-space: nowrap;
+}
+
+.table-wrap td:last-child button,
+.table-wrap td:last-child .btn {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Mobile table spacing */
+@media (max-width: 600px) {
+  .table-wrap {
+    border-radius: 14px;
+  }
+
+  .table-wrap th,
+  .table-wrap td {
+    padding: 12px 10px;
+  }
+
+  .table-wrap table {
+    min-width: 650px;
+  }
+}
