@@ -700,14 +700,14 @@ def api_login():
             409
         )
 
-  session.clear()
-  session["user_id"] = row["id"]
-  session["csrf_token"] = secrets.token_urlsafe(32)
+      session.clear()
+    session["user_id"] = row["id"]
+    session["csrf_token"] = secrets.token_urlsafe(32)
 
-  return jsonify({
-    "user": user_public(row),
-    "csrf_token": session["csrf_token"],
-})
+    return jsonify({
+        "user": user_public(row),
+        "csrf_token": session["csrf_token"],
+    })
 
 
 @app.post("/api/auth/signup")
