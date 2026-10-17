@@ -985,12 +985,12 @@ def api_update_hostel(hostel_id):
             name,
             data.get("type", h["type"]),
             data.get("college", h["college"]),
-            float(data.get("distance", h["distance"])),
+            distance_value,
             location,
             data.get("latitude", h["latitude"]),
             data.get("longitude", h["longitude"]),
             rent_value,
-            int(data.get("rooms", h["rooms"])),
+            rooms_value,
             (data.get("description", h["description"]) or "").strip(),
             ",".join(
                 data.get(
