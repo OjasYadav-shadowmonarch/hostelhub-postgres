@@ -585,8 +585,6 @@ def api_meta():
     return jsonify({"colleges": COLLEGES, "amenities": AMENITY_DEFS})
 
 @app.get("/api/state")
-
-@app.get("/api/state")
 def api_state():
     _, err = require_role("admin")
     if err:
