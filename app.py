@@ -84,7 +84,7 @@ def api_csrf_token():
         and supplied
         and hmac.compare_digest(expected, supplied)
     )
-    @app.before_request
+@app.before_request
 def protect_state_changing_requests():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return None
@@ -700,7 +700,7 @@ def api_login():
             409
         )
 
-      session.clear()
+    session.clear()
     session["user_id"] = row["id"]
     session["csrf_token"] = secrets.token_urlsafe(32)
 
