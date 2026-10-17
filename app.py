@@ -585,17 +585,34 @@ def api_meta():
     return jsonify({"colleges": COLLEGES, "amenities": AMENITY_DEFS})
 
 @app.get("/api/state")
+
+@app.get("/api/state")
 def api_state():
+    _, err = require_role("admin")
+    if err:
+        return err
+
     db = get_db()
-    users = [user_public(r) for r in db.execute("SELECT * FROM users").fetchall()]
+    users = [user_public(r) for r in db.execute(
+        "SELECT * FROM users"
+    ).fetchall()]
+
     hostels_rows = db.execute("""
         SELECT h.*, u.phone AS owner_phone, u.name AS owner_name
         FROM hostels h
         LEFT JOIN users u ON u.id = h.owner_id
     """).fetchall()
     hostels = [hostel_public(r) for r in hostels_rows]
-    inquiries = [inquiry_public(r) for r in db.execute("SELECT * FROM inquiries").fetchall()]
-    return jsonify({"users": users, "hostels": hostels, "inquiries": inquiries})
+
+    inquiries = [inquiry_public(r) for r in db.execute(
+        "SELECT * FROM inquiries"
+    ).fetchall()]
+
+    return jsonify({
+        "users": users,
+        "hostels": hostels,
+        "inquiries": inquiries
+    })
 
 
 @app.get("/api/auth/me")
