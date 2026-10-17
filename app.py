@@ -61,6 +61,11 @@ if not SECRET_KEY and os.environ.get("RENDER"):
     raise RuntimeError("SECRET_KEY must be configured in the production environment.")
 
 app.secret_key = SECRET_KEY or "roomfinder-dev-secret-change-me"
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=bool(os.environ.get("RENDER")),
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
