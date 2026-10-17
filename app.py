@@ -508,6 +508,34 @@ def current_user():
 def error(message, code=400):
     return jsonify({"error": message}), code
 
+def parse_number(value, field_name, *, integer=False, minimum=None, maximum=None):
+    """Parse and validate a numeric API input without raising an unhandled error."""
+    if value is None or isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a valid number.")
+
+    try:
+        number = int(value) if integer else float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{field_name} must be a valid number.") from None
+
+    import math
+    if not math.isfinite(number):
+        raise ValueError(f"{field_name} must be a finite number.")
+
+    if integer and isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{field_name} must be a whole number.")
+
+    if isinstance(value, str) and not value.strip():
+        raise ValueError(f"{field_name} must be a valid number.")
+
+    if minimum is not None and number < minimum:
+        raise ValueError(f"{field_name} must be at least {minimum}.")
+
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{field_name} must be at most {maximum}.")
+
+    return number
+
 
 def require_login():
     user = current_user()
@@ -868,6 +896,27 @@ def api_create_hostel():
 
     if not name or not location or not rent:
         return error("Please fill in property name, location and rent.")
+     
+    try:
+        rent_value = parse_number(
+            rent, "Rent", integer=True, minimum=1, maximum=1000000
+        )
+        rooms_value = parse_number(
+            data.get("rooms") or 1,
+            "Room count",
+            integer=True,
+            minimum=1,
+            maximum=500,
+        )
+        distance_value = parse_number(
+            data.get("distance") or 0.5,
+            "Distance",
+            minimum=0,
+            maximum=1000,
+        )
+    except ValueError as exc:
+        return error(str(exc), 400)
+ 
 
     db = get_db()
 
@@ -884,11 +933,11 @@ def api_create_hostel():
             user["id"],
             data.get("college", COLLEGES[0]),
             location,
-            float(data.get("distance") or 0.5),
+            distance_value,
             data.get("latitude"),
             data.get("longitude"),
             int(rent),
-            int(data.get("rooms") or 1),
+            rooms_value,
             ",".join(data.get("amenities") or []),
             (data.get("description") or "").strip(),
             data.get("image"),
