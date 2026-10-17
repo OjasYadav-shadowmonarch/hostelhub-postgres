@@ -2727,3 +2727,93 @@ body.light-theme .profile-readonly-row span:last-child {
     z-index: 4;
   }
 }
+
+/* Student and owner portal mobile improvements */
+@media (max-width: 600px) {
+  /* Owner property cards */
+  #viewRoot .listing-row {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  #viewRoot .listing-info {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+
+  #viewRoot .listing-actions {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  #viewRoot .listing-actions .btn {
+    min-height: 44px;
+  }
+
+  #viewRoot .listing-actions .icon-square {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
+  /* Keep student and owner tables usable */
+  #viewRoot .table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #viewRoot .table-wrap table {
+    min-width: 650px;
+  }
+
+  #viewRoot .table-wrap td:last-child button {
+    min-height: 44px;
+    white-space: nowrap;
+  }
+
+  /* Search and filter controls */
+  #viewRoot .search-panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  #viewRoot .search-panel input,
+  #viewRoot .search-panel button {
+    width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+
+  #viewRoot .type-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  #viewRoot .type-filter-chip {
+    min-height: 40px;
+  }
+
+  /* Avoid narrow-screen overflow in forms and dialogs */
+  #modalBody {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  #modalBody input,
+  #modalBody select,
+  #modalBody textarea {
+    max-width: 100%;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+}
