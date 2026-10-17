@@ -2699,3 +2699,31 @@ body.light-theme .profile-readonly-row span:last-child {
     min-width: 650px;
   }
 }
+
+/* Keep admin table actions visible during horizontal scrolling */
+@media (max-width: 900px) {
+  #viewRoot .table-wrap th:last-child,
+  #viewRoot .table-wrap td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: -8px 0 12px rgba(0, 0, 0, 0.12);
+  }
+
+  #viewRoot .table-wrap thead th:last-child {
+    z-index: 3;
+    background: var(--bg-soft);
+  }
+
+  #viewRoot .table-wrap tbody tr:hover td:last-child {
+    background: var(--surface-2);
+  }
+
+  #viewRoot .table-wrap td:last-child button,
+  #viewRoot .table-wrap td:last-child .btn,
+  #viewRoot .table-wrap td:last-child .icon-square {
+    position: relative;
+    z-index: 4;
+  }
+}
