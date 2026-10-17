@@ -936,7 +936,7 @@ def api_create_hostel():
             distance_value,
             data.get("latitude"),
             data.get("longitude"),
-            int(rent),
+            rent_value,
             rooms_value,
             ",".join(data.get("amenities") or []),
             (data.get("description") or "").strip(),
@@ -989,7 +989,7 @@ def api_update_hostel(hostel_id):
             location,
             data.get("latitude", h["latitude"]),
             data.get("longitude", h["longitude"]),
-            int(rent),
+            rent_value,
             int(data.get("rooms", h["rooms"])),
             (data.get("description", h["description"]) or "").strip(),
             ",".join(
