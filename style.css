@@ -2818,77 +2818,6 @@ body.light-theme .profile-readonly-row span:last-child {
   }
 }
 
-
-/* ==========================================
-   LIGHT THEME HERO — RESPONSIVE BACKGROUND
-   Keep the original hostel background image
-   ========================================== */
-
-/* Desktop */
-body.light-theme .l-hero {
-  background-image:
-    linear-gradient(
-      90deg,
-      rgba(248, 246, 240, 0.97) 0%,
-      rgba(248, 246, 240, 0.88) 42%,
-      rgba(248, 246, 240, 0.52) 72%,
-      rgba(248, 246, 240, 0.30) 100%
-    ),
-    url('/static/images/hero-hostel-day.jpg');
-
-  background-size: auto, cover;
-  background-position: center, center;
-  background-repeat: no-repeat;
-}
-
-/* Tablet */
-@media (max-width: 900px) {
-  body.light-theme .l-hero {
-    background-image:
-      linear-gradient(
-        90deg,
-        rgba(248, 246, 240, 0.96) 0%,
-        rgba(248, 246, 240, 0.84) 55%,
-        rgba(248, 246, 240, 0.48) 100%
-      ),
-      url('/static/images/hero-hostel-day.jpg');
-
-    background-size: auto, cover;
-    background-position: center, center;
-    background-repeat: no-repeat;
-  }
-}
-
-/* Mobile */
-
-@media (max-width: 600px) {
-  body.light-theme .l-hero {
-    background-image:
-      linear-gradient(
-        180deg,
-        rgba(248, 246, 240, 0.96) 0%,
-        rgba(248, 246, 240, 0.88) 48%,
-        rgba(248, 246, 240, 0.60) 100%
-      ),
-      url('/static/images/hero-hostel-day.jpg');
-
-    /* Prevent the image from being enlarged and cropped */
-    background-size: auto, 100% auto;
-
-    /* Keep the complete image visible */
-    background-position: center, center bottom;
-
-    background-repeat: no-repeat;
-  }
-}
-
-/* Small mobile */
-@media (max-width: 380px) {
-  body.light-theme .l-hero {
-    background-size: auto, cover;
-    background-position: center, center;
-  }
-}
 /* ---------- Consistent button sizing ---------- */
 
 .btn,
@@ -2973,36 +2902,7 @@ body.light-theme .btn-ghost:hover {
   color: #101827;
 }
 
-/* ---------- Light theme hero image ---------- */
-
-/* Desktop: preserve image proportions and avoid cover cropping. */
-
-body.light-theme .l-hero {
-  background-size: auto, min(58vw, 900px) auto;
-  background-position: center, right center;
-  background-repeat: no-repeat;
-}
-
-/* ---------- Tablet ---------- */
-
-@media (max-width: 900px) {
-  body.light-theme .l-hero {
-    background-image:
-      linear-gradient(
-        90deg,
-        rgba(248, 246, 240, 0.97) 0%,
-        rgba(248, 246, 240, 0.91) 48%,
-        rgba(248, 246, 240, 0.62) 100%
-      ),
-      url('/static/images/hero-hostel-day.jpg');
-
-    background-size: auto, auto 100%;
-    background-position: center, right center;
-    background-repeat: no-repeat;
-  }
-}
-
-/* ---------- Mobile ---------- */
+/* ---------- Mobile button sizing ---------- */
 
 @media (max-width: 600px) {
   .btn,
@@ -3011,26 +2911,9 @@ body.light-theme .l-hero {
   .l-nav-actions .btn {
     min-height: 44px;
   }
-
-  body.light-theme .l-hero {
-    min-height: 520px;
-
-    background-image:
-      linear-gradient(
-        180deg,
-        rgba(248, 246, 240, 0.96) 0%,
-        rgba(248, 246, 240, 0.88) 52%,
-        rgba(248, 246, 240, 0.70) 100%
-      ),
-      url('/static/images/hero-hostel-day.jpg');
-
-    background-size: auto, auto 72%;
-    background-position: center, center bottom;
-    background-repeat: no-repeat;
-  }
 }
 
-/* ---------- Small mobile screens ---------- */
+/* ---------- Small mobile CTA layout ---------- */
 
 @media (max-width: 380px) {
   .landing-cta-row {
@@ -3042,3 +2925,5 @@ body.light-theme .l-hero {
     width: 100%;
   }
 }
+
+
