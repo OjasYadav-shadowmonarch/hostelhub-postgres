@@ -2817,3 +2817,162 @@ body.light-theme .profile-readonly-row span:last-child {
     font-size: 16px;
   }
 }
+
+/* =========================================================
+   HOSTELHUB — RESPONSIVE THEME POLISH
+   Button consistency + light-theme hero image
+   ========================================================= */
+
+/* ---------- Consistent button sizing ---------- */
+
+.btn,
+button.btn {
+  min-height: 42px;
+  line-height: 1.25;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* ---------- Gold buttons ---------- */
+
+.btn-gold {
+  background: var(--gold);
+  border-color: var(--gold-soft);
+  color: #1c1400;
+  box-shadow: 0 5px 16px -6px rgba(242, 183, 5, 0.42);
+  filter: none;
+}
+
+.btn-gold:hover {
+  background: #ffd34d;
+  border-color: var(--gold-soft);
+  filter: none;
+}
+
+/* ---------- Light theme buttons ---------- */
+
+body.light-theme .btn-gold {
+  background: #f5b726;
+  border-color: #d99b0b;
+  color: #172033;
+}
+
+body.light-theme .btn-gold:hover {
+  background: #e9a915;
+  border-color: #c88b00;
+  color: #172033;
+}
+
+body.light-theme .btn-outline-green {
+  color: #167342;
+  border-color: #167342;
+}
+
+body.light-theme .btn-outline-green:hover {
+  background: rgba(22, 115, 66, 0.10);
+}
+
+body.light-theme .btn-outline-red {
+  color: #b4232d;
+  border-color: #b4232d;
+}
+
+body.light-theme .btn-outline-red:hover {
+  background: rgba(180, 35, 45, 0.09);
+}
+
+body.light-theme .btn-solid-green {
+  background: #168044;
+  border-color: #168044;
+  color: #ffffff;
+}
+
+body.light-theme .btn-solid-green:hover {
+  background: #116b38;
+  border-color: #116b38;
+}
+
+body.light-theme .btn-ghost {
+  color: #172033;
+  border-color: transparent;
+}
+
+body.light-theme .btn-ghost:hover {
+  background: #e9edf3;
+  color: #101827;
+}
+
+/* ---------- Light theme hero image ---------- */
+
+/* Desktop: preserve image proportions and avoid cover cropping. */
+
+body.light-theme .l-hero {
+  background-size: auto, min(58vw, 900px) auto;
+  background-position: center, right center;
+  background-repeat: no-repeat;
+}
+
+/* ---------- Tablet ---------- */
+
+@media (max-width: 900px) {
+  body.light-theme .l-hero {
+    background-image:
+      linear-gradient(
+        90deg,
+        rgba(248, 246, 240, 0.97) 0%,
+        rgba(248, 246, 240, 0.91) 48%,
+        rgba(248, 246, 240, 0.62) 100%
+      ),
+      url('/static/images/hero-hostel-day.jpg');
+
+    background-size: auto, auto 100%;
+    background-position: center, right center;
+    background-repeat: no-repeat;
+  }
+}
+
+/* ---------- Mobile ---------- */
+
+@media (max-width: 600px) {
+  .btn,
+  button.btn,
+  .landing-cta-row .btn,
+  .l-nav-actions .btn {
+    min-height: 44px;
+  }
+
+  body.light-theme .l-hero {
+    min-height: 520px;
+
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(248, 246, 240, 0.96) 0%,
+        rgba(248, 246, 240, 0.88) 52%,
+        rgba(248, 246, 240, 0.70) 100%
+      ),
+      url('/static/images/hero-hostel-day.jpg');
+
+    background-size: auto, auto 72%;
+    background-position: center, center bottom;
+    background-repeat: no-repeat;
+  }
+}
+
+/* ---------- Small mobile screens ---------- */
+
+@media (max-width: 380px) {
+  .landing-cta-row {
+    flex-wrap: wrap;
+  }
+
+  .landing-cta-row .btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
