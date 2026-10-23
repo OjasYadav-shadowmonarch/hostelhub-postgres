@@ -2860,6 +2860,7 @@ body.light-theme .l-hero {
 }
 
 /* Mobile */
+
 @media (max-width: 600px) {
   body.light-theme .l-hero {
     background-image:
@@ -2871,8 +2872,12 @@ body.light-theme .l-hero {
       ),
       url('/static/images/hero-hostel-day.jpg');
 
-    background-size: auto, cover;
-    background-position: center, center;
+    /* Prevent the image from being enlarged and cropped */
+    background-size: auto, 100% auto;
+
+    /* Keep the complete image visible */
+    background-position: center, center bottom;
+
     background-repeat: no-repeat;
   }
 }
