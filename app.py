@@ -615,7 +615,7 @@ def history():
         <h2>Student Registrations: {students}</h2>
         <h2>Owner Registrations: {owners}</h2>
         <h2>Today's Inquiries: {inquiries}</h2>
-
+"""
 @app.get("/api/auth/me")
 def api_me():
     user = current_user()
