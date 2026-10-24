@@ -585,6 +585,36 @@ def api_state():
     inquiries = [inquiry_public(r) for r in db.execute("SELECT * FROM inquiries").fetchall()]
     return jsonify({"users": users, "hostels": hostels, "inquiries": inquiries})
 
+@app.route("/history")
+def history():
+
+    user, err = require_role("admin")
+    if err:
+        return err
+
+    db = get_db()
+    today = date.today()
+
+    students = db.execute(
+        "SELECT COUNT(*) FROM users WHERE role='student' AND joined=%s",
+        (today,)
+    ).fetchone()["count"]
+
+    owners = db.execute(
+        "SELECT COUNT(*) FROM users WHERE role='owner' AND joined=%s",
+        (today,)
+    ).fetchone()["count"]
+
+    inquiries = db.execute(
+        "SELECT COUNT(*) FROM inquiries WHERE date=%s",
+        (today,)
+    ).fetchone()["count"]
+
+    return f"""
+        <h1>Today's History</h1>
+        <h2>Student Registrations: {students}</h2>
+        <h2>Owner Registrations: {owners}</h2>
+        <h2>Today's Inquiries: {inquiries}</h2>
 
 @app.get("/api/auth/me")
 def api_me():
