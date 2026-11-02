@@ -290,7 +290,7 @@
   function syncThemeColour() {
     if (!themeMeta) return;
     const light = document.body.classList.contains("light-theme");
-    themeMeta.setAttribute("content", light ? "#f6f3ec" : "#070a12");
+    themeMeta.setAttribute("content", light ? "#f7f4ed" : "#070a12");
   }
 
   document.addEventListener("click", (event) => {

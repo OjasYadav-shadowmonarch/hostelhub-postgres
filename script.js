@@ -42,7 +42,7 @@ let AMENITY_DEFS = [];
 
 function emptyState() {
   return {
-    users: [], hostels: [], inquiries: [],
+    users: [], hostels: [], inquiries: [], stats: null,
     currentUser: null,
     // "landing" = public home page, "auth" = login/signup card, "app" = logged-in / guest app
     screen: "landing",
@@ -69,9 +69,10 @@ let state = emptyState();
 /* Re-pull users/hostels/inquiries from the backend into the local cache. */
 async function refreshState() {
   const fresh = await api("/state");
-  state.users = fresh.users;
-  state.hostels = fresh.hostels;
-  state.inquiries = fresh.inquiries;
+  state.users = fresh.users || [];
+  state.hostels = fresh.hostels || [];
+  state.inquiries = fresh.inquiries || [];
+  state.stats = fresh.stats || null;
   if (state.currentUser && state.currentUser.role === "student") {
     try {
       const wl = await api("/wishlist");
@@ -235,16 +236,19 @@ function renderLandingNavActions() {
       <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
     `;
   }
+  syncThemeUI();
 }
 
 function renderLandingStats() {
-  const verifiedCount = state.hostels.filter(h => h.status === "verified").length;
-  const collegeCount = COLLEGES.length;
-  const ownerCount = state.users.filter(u => u.role === "owner").length;
+  const stats = state.stats || {};
   const rated = state.hostels.filter(h => h.status === "verified" && typeof h.rating === "number");
-  const avgRating = rated.length
+  const fallbackRating = rated.length
     ? rated.reduce((sum, h) => sum + h.rating, 0) / rated.length
     : 0;
+  const verifiedCount = stats.verifiedHostels ?? state.hostels.filter(h => h.status === "verified").length;
+  const collegeCount = COLLEGES.length;
+  const ownerCount = stats.ownerCount ?? state.users.filter(u => u.role === "owner").length;
+  const avgRating = stats.averageRating ?? fallbackRating;
   $("#landingStats").innerHTML = `
     <div class="landing-stat-chip"><b data-count="${verifiedCount}">0</b><span>VERIFIED HOSTELS</span></div>
     <div class="landing-stat-chip"><b data-count="${collegeCount}">0</b><span>COLLEGES COVERED</span></div>
@@ -256,8 +260,8 @@ function renderLandingStats() {
 
 // Animates each stat chip's number from 0 up to its real (backend-derived)
 // value. Purely a presentation layer on top of renderLandingStats() — the
-// counted values themselves still come straight from state.hostels / COLLEGES
-// / state.users above, nothing here is hard-coded.
+// counted values themselves still come from the scoped state payload, so
+// nothing here is hard-coded and no private user records are exposed.
 function animateLandingCounters() {
   const nodes = document.querySelectorAll("#landingStats b[data-count]");
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -462,7 +466,7 @@ function renderAuthCard() {
           <label for="signupPassword">Password *</label>
           <div class="auth-control password-field">
             <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.lock}</span>
-            <input type="password" id="signupPassword" placeholder="Min 6 characters" autocomplete="new-password" aria-describedby="signupStrength" />
+            <input type="password" id="signupPassword" placeholder="Min 8 characters" autocomplete="new-password" aria-describedby="signupStrength" />
             <button type="button" class="eye-btn" data-action="toggle-password" data-id="signupPassword">Show</button>
           </div>
           <p class="auth-caps" hidden aria-live="polite">Caps Lock is on</p>
@@ -614,13 +618,13 @@ function enhanceAuthForm() {
     }
 
     let score = 0;
-    if (value.length >= 6) score++;
-    if (value.length >= 10) score++;
+    if (value.length >= 8) score++;
+    if (value.length >= 12) score++;
     if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score++;
     if (/\d/.test(value)) score++;
     if (/[^A-Za-z0-9]/.test(value)) score++;
     score = Math.min(score, 4);
-    if (value.length < 6) score = 0;
+    if (value.length < 8) score = 0;
 
     const levels = ["Too short", "Weak", "Fair", "Good", "Strong"];
     strength.hidden = false;
@@ -684,7 +688,7 @@ async function handleLogin() {
     if (err.status === 409) {
       // wrong portal for this (non-admin) account — offer to redirect
       const guessRole = state.activePortal === "student" ? "owner" : "student";
-      errorEl.innerHTML = err.message + ` <a href="#" data-action="switch-portal" data-id="${guessRole}">Switch portal →</a>`;
+      errorEl.innerHTML = esc(err.message) + ` <a href="#" data-action="switch-portal" data-id="${guessRole}">Switch portal →</a>`;
     } else {
       errorEl.textContent = err.message;
     }
@@ -724,8 +728,8 @@ async function handleSignup() {
     errorEl.hidden = false;
     return;
   }
-  if (password.length < 6) {
-    errorEl.textContent = "Password must be at least 6 characters.";
+  if (password.length < 8) {
+    errorEl.textContent = "Password must be at least 8 characters.";
     errorEl.hidden = false;
     return;
   }
@@ -867,6 +871,7 @@ function renderNavRight() {
       <span class="guest-chip">👤 Browsing as guest</span>
       <button class="btn btn-gold btn-sm" data-action="go-landing-login">Log In</button>
     `;
+    syncThemeUI();
     return;
   }
 
@@ -879,6 +884,7 @@ function renderNavRight() {
     </div>
     <button class="icon-btn" data-action="logout" title="Sign out">⏻</button>
   `;
+  syncThemeUI();
 }
 
 function setActiveNavTab(view) {
@@ -909,13 +915,27 @@ function navigate(view) {
   setActiveNavTab(view);
 }
 
+function syncThemeUI() {
+  const isLight = document.body.classList.contains("light-theme");
+  document.documentElement.style.colorScheme = isLight ? "light" : "dark";
+
+  $all('[data-action="toggle-theme"]').forEach(btn => {
+    const label = isLight ? "Switch to dark theme" : "Switch to light theme";
+    btn.textContent = isLight ? "🌙" : "☀️";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("aria-pressed", isLight ? "true" : "false");
+  });
+
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", isLight ? "#f7f4ed" : "#070a12");
+}
+
 function toggleTheme() {
   document.body.classList.toggle("light-theme");
   const isLight = document.body.classList.contains("light-theme");
   try { localStorage.setItem("hostelhub_theme", isLight ? "light" : "dark"); } catch (_) {}
-  $all('[data-action="toggle-theme"]').forEach(btn => {
-    btn.textContent = isLight ? "🌙" : "☀️";
-  });
+  syncThemeUI();
 }
 
 /* ---------------------- Shared components ---------------------- */
@@ -936,7 +956,7 @@ function statusBadge(status) {
 function hostelThumbHTML(hostel, sizeClass) {
   const typeIcon = hostel.type === "Boys Hostel" ? "🏠" : hostel.type === "Girls Hostel" ? "🏡" : "🛏️";
   return hostel.image
-    ? `<img src="${hostel.image}" alt="${esc(hostel.name)}" />`
+    ? `<img src="${esc(hostel.image)}" alt="${esc(hostel.name)}" loading="lazy" />`
     : typeIcon;
 }
 
@@ -1092,7 +1112,7 @@ function studentInquiriesHTML() {
   }).join("");
 
   const body = mine.length ? `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Hostel</th><th>Your message</th><th>Sent</th><th>Status</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1179,7 +1199,7 @@ function renderProfileView() {
           <div class="password-field"><input type="password" id="profileCurrentPassword" placeholder="Current password" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileCurrentPassword">Show</button></div>
         </div>
         <div class="field-group"><label for="profileNewPassword">New Password</label>
-          <div class="password-field"><input type="password" id="profileNewPassword" placeholder="Min 6 characters" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileNewPassword">Show</button></div>
+          <div class="password-field"><input type="password" id="profileNewPassword" placeholder="Min 8 characters" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileNewPassword">Show</button></div>
         </div>
         <div class="field-group"><label for="profileNewConfirm">Confirm New Password</label>
           <div class="password-field"><input type="password" id="profileNewConfirm" placeholder="Re-enter new password" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileNewConfirm">Show</button></div>
@@ -1241,8 +1261,8 @@ async function savePassword() {
     errorEl.hidden = false;
     return;
   }
-  if (newPassword.length < 6) {
-    errorEl.textContent = "New password must be at least 6 characters.";
+  if (newPassword.length < 8) {
+    errorEl.textContent = "New password must be at least 8 characters.";
     errorEl.hidden = false;
     return;
   }
@@ -1265,18 +1285,62 @@ async function savePassword() {
 
 /* ---------------------- Modals: hostel detail & compare ---------------------- */
 
+let lastFocusedElement = null;
+
+function modalFocusableElements() {
+  const modal = $("#modalBody");
+  if (!modal) return [];
+  return Array.from(modal.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+    'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(el => el.getClientRects().length > 0);
+}
+
 function openModal(html, extraClass) {
   const overlay = $("#modalOverlay");
   const body = $("#modalBody");
+  const wasClosed = overlay.hidden;
+  if (wasClosed) lastFocusedElement = document.activeElement;
+
   body.className = "modal" + (extraClass ? " " + extraClass : "");
   body.innerHTML = html;
   overlay.hidden = false;
+  document.body.classList.add("modal-open");
+
+  const title = body.querySelector(".modal-title");
+  if (title) {
+    title.id = title.id || "modalTitle";
+    body.setAttribute("aria-labelledby", title.id);
+    body.removeAttribute("aria-label");
+  } else {
+    body.removeAttribute("aria-labelledby");
+    body.setAttribute("aria-label", "Dialog");
+  }
+
+  body.querySelectorAll(".modal-close").forEach(button => {
+    if (!button.getAttribute("aria-label")) button.setAttribute("aria-label", "Close dialog");
+  });
+
+  window.requestAnimationFrame(() => {
+    const target = body.querySelector("[autofocus]") || modalFocusableElements()[0] || body;
+    target.focus();
+  });
 }
+
 function closeModal() {
-  $("#modalOverlay").hidden = true;
+  const overlay = $("#modalOverlay");
+  if (!overlay) return;
+  const wasOpen = !overlay.hidden;
+  overlay.hidden = true;
   $("#modalBody").innerHTML = "";
+  document.body.classList.remove("modal-open");
   state.editingHostelId = null;
   state.listingImageData = null;
+
+  if (wasOpen && lastFocusedElement && document.contains(lastFocusedElement)) {
+    lastFocusedElement.focus();
+  }
+  lastFocusedElement = null;
 }
 
 function openHostelDetail(id) {
@@ -1298,8 +1362,8 @@ function openHostelDetail(id) {
       <span class="type-chip">${esc(h.type)}</span>
       ${statusBadge(h.status)}
       <span class="rating detail-header-rating">★ ${ratingStr} rating</span>
-      <span class="badge" style="background:rgba(217,119,6,0.15); color:#f59e0b; border:1px solid rgba(217,119,6,0.3); padding:4px 8px; border-radius:12px; font-size:12px;">🍲 ${esc(h.foodType || "Veg & Non-Veg")}</span>
-      <span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:4px 8px; border-radius:12px; font-size:12px;">⏰ Curfew: ${esc(h.curfew || "10:00 PM")}</span>
+      <span class="badge detail-meta-badge detail-meta-food">🍲 ${esc(h.foodType || "Veg & Non-Veg")}</span>
+      <span class="badge detail-meta-badge detail-meta-curfew">⏰ Curfew: ${esc(h.curfew || "10:00 PM")}</span>
     </div>
     <div class="detail-stats">
       <div class="detail-stat"><b>${currency(h.rent)}</b><span>PER MONTH</span></div>
@@ -1347,7 +1411,7 @@ function openHostelDetail(id) {
     </div>
 
     ${state.currentUser && state.currentUser.role === 'student' ? `
-      <div class="add-review-box" style="margin-top:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+      <div class="add-review-box">
         <div style="font-weight:600; font-size:13px; margin-bottom:8px;">Leave a Review & Rating</div>
         <div class="star-rating-picker" id="reviewStarPicker" style="display:flex; gap:6px; margin-bottom:10px; font-size:22px;">
           <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
@@ -1651,8 +1715,8 @@ window.hostelHubDetailMap = map;
 function getOwnerPhoneForHostel(hostelId) {
   const h = findHostel(hostelId);
   if (!h) return "";
-  const owner = findUser(h.ownerId);
-  const phone = h.ownerPhone || (owner ? owner.phone : "");
+  const owner = findUser(h.ownerId) || { phone: "" };
+  const phone = h.ownerPhone || owner.phone || "";
   return String(phone || "").replace(/\D/g, "");
 }
 
@@ -1907,8 +1971,8 @@ function ownerInquiriesHTML(ownerId) {
     return `<div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No inquiries yet</div><div>Student messages about your listings will show up here.</div></div>`;
   }
   const rows = list.map(i => {
-    const student = findUser(i.studentId);
-    const h = findHostel(i.hostelId);
+    const student = findUser(i.studentId) || { name: "Deleted student", email: "" };
+    const h = findHostel(i.hostelId) || { name: "Listing removed" };
     return `
       <tr>
         <td><div class="cell-title">${esc(student.name)}</div><div class="cell-sub">${esc(student.email)}</div></td>
@@ -1920,7 +1984,7 @@ function ownerInquiriesHTML(ownerId) {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Student</th><th>Hostel</th><th>Message</th><th>Received</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -2059,7 +2123,7 @@ function openListingModal(id) {
     </label>`).join("");
 
   const previewHTML = state.listingImageData
-    ? `<img src="${state.listingImageData}" alt="Preview" /><div>Click to change image</div>`
+    ? `<img src="${esc(state.listingImageData)}" alt="Preview" /><div>Click to change image</div>`
     : `<span class="dz-icon">☁️⬆️</span><div>Click to upload image<br>or paste an image URL below</div>`;
 
   openModal(`
@@ -2159,7 +2223,7 @@ function handleImageUpload(file) {
   reader.onload = (e) => {
     state.listingImageData = e.target.result;
     const dz = $("#listingDropzone");
-    if (dz) dz.innerHTML = `<img src="${state.listingImageData}" alt="Preview" /><div>Click to change image</div>`;
+    if (dz) dz.innerHTML = `<img src="${esc(state.listingImageData)}" alt="Preview" /><div>Click to change image</div>`;
   };
   reader.readAsDataURL(file);
 }
@@ -2272,7 +2336,7 @@ function adminApprovalHTML(pending) {
     return `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div>There are no listings waiting for approval.</div></div>`;
   }
   const rows = pending.map(h => {
-    const owner = findUser(h.ownerId);
+    const owner = findUser(h.ownerId) || { name: "Unknown owner", phone: "" };
     return `
       <tr>
         <td>
@@ -2293,7 +2357,7 @@ function adminApprovalHTML(pending) {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Property</th><th>Owner Details</th><th>Type &amp; Price</th><th>Submitted</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -2306,7 +2370,7 @@ function adminPropertiesHTML() {
     return `<div class="empty-state"><div class="empty-icon">🏘️</div><div class="empty-title">No properties on the platform</div></div>`;
   }
   const rows = state.hostels.slice().sort((a, b) => b.views - a.views).map(h => {
-    const owner = findUser(h.ownerId);
+    const owner = findUser(h.ownerId) || { name: "Unknown owner" };
     const inqCount = state.inquiries.filter(i => i.hostelId === h.id).length;
     return `
       <tr>
@@ -2324,7 +2388,7 @@ function adminPropertiesHTML() {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Property</th><th>Owner</th><th>Status</th><th>Views</th><th>Inquiries</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -2353,7 +2417,7 @@ function adminUsersHTML() {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>User</th><th>Role</th><th>Joined</th><th>Activity</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -2378,7 +2442,7 @@ function adminReportsHTML() {
     const pct = Math.round((count / totalHostels) * 100);
     return `
       <div class="progress-row">
-        <div class="progress-row-top"><span>${label}</span><span>${pct}%</span></div>
+        <div class="progress-row-top"><span>${esc(label)}</span><span>${pct}%</span></div>
         <div class="progress-track"><div class="progress-fill" data-final-width="${pct}%"></div></div>
       </div>`;
   }).join("");
@@ -2505,6 +2569,80 @@ async function exportData() {
   showToast("Platform data exported.", "success");
 }
 
+function askAdminPassword() {
+  return new Promise(resolve => {
+    let settled = false;
+    let overlayListener = null;
+    const overlay = $("#modalOverlay");
+
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      if (overlayListener) overlay.removeEventListener("click", overlayListener);
+      document.removeEventListener("keydown", onKeydown, true);
+      closeModal();
+      resolve(value);
+    };
+
+    const onKeydown = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finish(null);
+      }
+    };
+
+    openModal(`
+      <div class="modal-header">
+        <h2 class="modal-title">Confirm administrator password</h2>
+        <button class="modal-close" type="button" data-action="close-modal" aria-label="Cancel">✕</button>
+      </div>
+      <form id="adminResetAuthForm" class="modal-form">
+        <p class="modal-copy">Re-enter your administrator password to permanently clear platform data.</p>
+        <div class="field-group">
+          <label for="adminResetPassword">Administrator password</label>
+          <input type="password" id="adminResetPassword" autocomplete="current-password" required />
+        </div>
+        <div id="adminResetError" class="form-error" role="alert" hidden></div>
+        <div class="modal-actions">
+          <button class="btn" type="button" data-action="close-modal">Cancel</button>
+          <button class="btn btn-outline-red" type="submit">Clear platform data</button>
+        </div>
+      </form>
+    `);
+
+    const form = $("#adminResetAuthForm");
+    const input = $("#adminResetPassword");
+    const errorEl = $("#adminResetError");
+    const cancel = form?.querySelector('[data-action="close-modal"]');
+
+    form?.addEventListener("submit", event => {
+      event.preventDefault();
+      const password = input ? input.value : "";
+      if (!password) {
+        if (errorEl) {
+          errorEl.textContent = "Enter your administrator password.";
+          errorEl.hidden = false;
+        }
+        input?.focus();
+        return;
+      }
+      finish(password);
+    });
+    cancel?.addEventListener("click", event => {
+      event.preventDefault();
+      finish(null);
+    });
+    overlayListener = event => {
+      if (event.target === overlay) finish(null);
+    };
+    overlay.addEventListener("click", overlayListener);
+    document.addEventListener("keydown", onKeydown, true);
+
+    window.setTimeout(() => input?.focus(), 0);
+  });
+}
+
 async function resetData() {
   const confirmed = confirm(
     "CLEAR ALL PLATFORM DATA?\n\n" +
@@ -2516,10 +2654,13 @@ async function resetData() {
 
   if (!confirmed) return;
 
+  const password = await askAdminPassword();
+  if (password === null) return;
+
   let data;
 
   try {
-    data = await api("/reset", { method: "POST" });
+    data = await api("/reset", { method: "POST", body: { password } });
   } catch (err) {
     showToast(err.message, "error");
     return;
@@ -2646,13 +2787,13 @@ async function loadHostelReviews(hostelId) {
       return;
     }
     container.innerHTML = reviews.map(r => `
-      <div class="review-card" style="padding:10px 12px; margin-top:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-          <span style="font-weight:600; font-size:13px;">${esc(r.studentName)}</span>
-          <span style="color:#f59e0b; font-size:12px;">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
+      <div class="review-card review-card-detail">
+        <div class="review-card-head">
+          <span class="review-card-name">${esc(r.studentName)}</span>
+          <span class="review-card-stars" aria-label="${r.rating} out of 5 stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
         </div>
-        <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5;">${esc(r.comment)}</div>
-        <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">${r.date}</div>
+        <div class="review-card-body">${esc(r.comment)}</div>
+        <div class="review-card-date">${esc(r.date)}</div>
       </div>
     `).join("");
   } catch (err) {
@@ -2790,7 +2931,29 @@ document.addEventListener("keydown", (e) => {
     if (document.activeElement && document.activeElement.id === "signupConfirm") handleSignup();
     if (document.activeElement && document.activeElement.id === "hostelSearchInput") runSearch();
   }
-  if (e.key === "Escape" && !$("#modalOverlay").hidden) closeModal();
+
+  const overlay = $("#modalOverlay");
+  if (overlay && !overlay.hidden && e.key === "Tab") {
+    const focusable = modalFocusableElements();
+    const modal = $("#modalBody");
+    if (!focusable.length) {
+      e.preventDefault();
+      modal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || !modal.contains(active))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (active === last || !modal.contains(active))) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  if (e.key === "Escape" && overlay && !overlay.hidden) closeModal();
 });
 
 $("#modalOverlay").addEventListener("click", (e) => {
@@ -2950,10 +3113,7 @@ async function init() {
   try {
     const footerYr = document.getElementById("footerYear");
     if (footerYr) footerYr.textContent = new Date().getFullYear();
-    if (localStorage.getItem("hostelhub_theme") === "light") {
-      document.body.classList.add("light-theme");
-      $all('[data-action="toggle-theme"]').forEach(btn => { btn.textContent = "🌙"; });
-    }
+    syncThemeUI();
   } catch (_) {}
   try {
     const meta = await api("/meta");

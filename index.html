@@ -9,23 +9,6 @@
     content="HostelHub helps students find verified hostels, PGs and rooms near their college — compare rent, distance and amenities, then connect directly with property owners." />
   <title>HostelHub — Find a place you'll feel at home</title>
 
-  <!-- Intro bootstrap: decide before first paint whether the cinematic opener
-       should play. It runs once per browser session, can be forced with
-       ?intro=1, and is skipped entirely for reduced-motion visitors. -->
-  <script>
-    (function () {
-      var root = document.documentElement;
-      root.classList.add("hh-js");
-      try {
-        var forced = new URLSearchParams(window.location.search).get("intro") === "1";
-        var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        var seen = false;
-        try { seen = sessionStorage.getItem("hostelhub_intro_seen") === "1"; } catch (_) {}
-        if (reduce || (!forced && seen)) root.classList.add("hh-intro-skipped");
-      } catch (_) {}
-    })();
-  </script>
-
   <link rel="icon" href="static/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16x16.png">
@@ -40,10 +23,13 @@
   <link rel="stylesheet" href="static/effects/role-backgrounds.css" />
   <link rel="stylesheet" href="static/pro/upgrade.css" />
   <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <link rel="stylesheet" href="static/pro/light-refinement.css" />
   <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 </head>
 
 <body>
+  <!-- Theme + intro bootstrap: must run before the rest of the page paints. -->
+  <script src="static/pro/theme-boot.js"></script>
 
   <!-- =================== CINEMATIC BRAND INTRO =================== -->
   <div id="hhBoot" class="hh-boot" role="region" aria-label="HostelHub introduction">
@@ -127,8 +113,8 @@
         </nav>
 
         <div class="l-nav-actions" id="landingNavActions">
-          <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme"
-            aria-label="Toggle theme">☀️</button>
+          <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Switch to light theme"
+            aria-label="Switch to light theme" aria-pressed="false">☀️</button>
           <button class="btn btn-ghost" data-action="go-landing-login">Log In</button>
           <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
         </div>
@@ -625,7 +611,7 @@
         <a href="/" class="nav-logo" data-action="back-to-landing" aria-label="HostelHub Home">🏠 HostelHub</a>
       </div>
       <div class="nav-right">
-        <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">☀️</button>
+        <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false">☀️</button>
       </div>
     </header>
     <div class="auth-orb orb-1"></div>
@@ -844,7 +830,7 @@
 
   <!-- =================== MODAL =================== -->
   <div class="modal-overlay" id="modalOverlay" hidden>
-    <div class="modal" id="modalBody"></div>
+    <div class="modal" id="modalBody" role="dialog" aria-modal="true" tabindex="-1"></div>
   </div>
 
   <!-- Floating back-to-top (app + landing) -->

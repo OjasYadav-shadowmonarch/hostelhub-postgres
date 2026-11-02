@@ -198,6 +198,8 @@ hostelhub-postgres/
 | `static/effects/role-backgrounds.js` | Role-background interactions and cursor effects |
 | `static/pro/upgrade.css` | Landing-page intro, hero overlays, FAQ and responsive navigation styles |
 | `static/pro/upgrade.js` | Landing navigation, hero interactions and FAQ scroll-spy behaviour |
+| `static/pro/light-refinement.css` | Isolated light-theme refinements, focus states and touch-target rules |
+| `static/pro/theme-boot.js` | Pre-paint theme restoration, intro bootstrapping and browser chrome colour sync |
 | `static/pro/history.css` | Styling for the `/history` summary page |
 | `static/` | Static resources such as icons, images, effect styles and page-specific assets |
 
@@ -281,7 +283,19 @@ The following milestones document the project's development in chronological ord
 - Extended the landing navigation drawer to tablet widths and kept the actions panel docked beneath the links.
 - Rechecked responsive navigation, landing accessibility, dashboards, authentication and history views.
 
-**Current documented milestone:** `1.5.0 — Landing Experience and FAQ Navigation`
+### Version 1.6.0 — Light Theme and Security Refinement
+
+**Focus:** A cohesive light theme, cross-device accessibility, and defensive hardening.
+
+- Refined the light theme independently across landing, authentication, dashboards, forms, tables, modals, maps, notifications, footer, loading and empty states.
+- Kept the saved-theme preference and existing dark theme intact, with an isolated light-theme stylesheet and prepaint theme restoration.
+- Improved keyboard focus visibility, modal focus trapping and return, dialog semantics, table scrolling semantics and touch targets.
+- Hardened sessions with signed user/password/role/status claims, absolute expiry and deactivation invalidation.
+- Added CSRF origin checks, security headers, request-size limits, input validation, role-scoped state responses and rate limiting for sensitive endpoints.
+- Added a fail-closed `SECRET_KEY` requirement, administrator password re-confirmation for data reset, and a guard against demo data being seeded with blank passwords.
+- Re-verified MapLibre route markers, responsive layouts and both themes with automated browser checks.
+
+**Current documented milestone:** `1.6.0 - Light Theme and Security Refinement`
 
 The version history describes development milestones rather than verified release tags. Update this section whenever a new feature or significant fix is merged into the stable branch.
 
@@ -355,7 +369,13 @@ python -m pip install -r requirements.txt
 
 Create a local `.env` file using `.env.example` as the reference.
 
-Configure the database connection and a secure application secret before starting the backend.
+At minimum, set the PostgreSQL connection details and a random `SECRET_KEY` of 32 or more characters. The application refuses to start without a usable secret, because a known fallback key would let anyone forge session cookies. Generate one with:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Set `SESSION_COOKIE_SECURE=1` when the app is served over HTTPS. Leave `FLASK_DEBUG=0` outside local development. Administrator provisioning is optional; when both `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set, the first boot creates that administrator without overwriting an existing account.
 
 ### 5. Initialize PostgreSQL
 
@@ -373,7 +393,7 @@ psql -U postgres -d roomfinder -f schema.sql
 
 Use the actual database name and PostgreSQL username configured on your machine.
 
-**Important:** Inspect the SQL files before executing them against an existing database. Do not run destructive SQL operations on production data.
+**Important:** Inspect the SQL files before executing them against an existing database. Do not run destructive SQL operations on production data. Use `schema.sql` for production. `database.sql` contains demo accounts with published demo credentials and must only be used for local demonstrations.
 
 ### 6. Start the application
 
@@ -461,10 +481,14 @@ Configure the required production environment variables in the Render dashboard.
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection URL |
-| `SECRET_KEY` | Secret used to sign Flask sessions |
+| `SECRET_KEY` | Required. Random session-signing secret of at least 32 characters |
 | `FLASK_DEBUG` | Keep disabled in production |
+| `SESSION_LIFETIME_HOURS` | Absolute session lifetime, default `12` (range `1`-`168`) |
+| `SESSION_COOKIE_SECURE` | Set to `1` when the site is served over HTTPS |
+| `TRUST_PROXY` | Set to `1` only behind a trusted reverse proxy that supplies `X-Forwarded-For` |
 | `ADMIN_USERNAME` | Optional configured administrator username |
 | `ADMIN_PASSWORD` | Optional configured administrator password |
+| `DEMO_PASSWORD` | Optional demo-data helper only. Never set in production |
 
 The actual variables required depend on the backend configuration and deployment settings.
 
@@ -517,14 +541,40 @@ If Render is configured for automatic deployment from `main`, merging a commit m
 
 ## 🔐 Security
 
+### Implemented protections
+
+- `SECRET_KEY` is mandatory and must be at least 32 characters; the app refuses to start with a missing or weak key.
+- Session cookies are `HttpOnly`, `SameSite=Lax`, named `hostelhub_session`, and configurable as `Secure` for HTTPS deployments. Absolute lifetime defaults to 12 hours.
+- Session claims are signed against the user id, password hash, role and account status. Password changes and deactivations invalidate existing sessions.
+- State-changing `/api/` requests require a same-origin `Origin`/`Referer`/`Sec-Fetch-Site` context. Cross-site form posts are rejected.
+- Security headers include CSP, frame denial, `nosniff`, referrer policy, permissions policy and HSTS when the request is secure.
+- Sensitive endpoints have in-process rate limits. JSON `404`/`413` responses replace HTML error pages, and request bodies are capped at 5 MB.
+- `/api/state` is role-scoped. Guests and students do not receive owner contact details or unrelated inquiries.
+- Listing, inquiry, review, contact, wishlist and geocode inputs are validated and bounds-checked.
+- Administrator data reset requires the current administrator password and keeps the signed-in administrator account.
+- Demo-data seeding refuses to run without `DEMO_PASSWORD`, `ADMIN_USERNAME` and `ADMIN_PASSWORD`, so it cannot create accounts with blank passwords.
+- Password minimum length is 8 characters in both the frontend and backend.
+
+### Deployment checklist
+
 - Keep `.env` out of version control.
 - Use strong, unique secrets for production.
 - Store passwords using secure password hashing.
 - Configure administrator credentials through the deployment environment.
 - Never commit database passwords, API secrets or private credentials.
-- Use HTTPS for the deployed application.
+- Use HTTPS and set `SESSION_COOKIE_SECURE=1`.
 - Back up production data before performing database changes.
 - Test authentication and role-based permissions after backend updates.
+- Do not load `database.sql` into production. Its demo accounts have published demo credentials.
+
+### Known limitations
+
+- Rate limiting is in-process and therefore per worker. A multi-worker deployment should add a shared limiter such as Redis or a reverse-proxy rate limit.
+- CSRF protection is based on origin checks rather than per-session tokens. It blocks normal cross-site form posts but is not a substitute for token-based CSRF protection in every architecture.
+- CSP still permits inline styles because the existing interface uses inline `style` attributes. Inline scripts are not allowed.
+- `SESSION_COOKIE_SECURE` depends on deployment configuration. HSTS is emitted only when Flask sees a secure request; a reverse proxy must preserve the forwarded protocol.
+- Demo credentials remain in `database.sql` for local demonstration only. Rotate or remove them before any public deployment.
+- Browser checks covered this repository's demo dataset. Real-device testing, assistive-technology testing and load testing were not performed.
 
 ---
 

@@ -18,11 +18,17 @@ Same routes, same JSON shapes, same script.js as the SQLite version --
 only the storage layer changed.
 """
 # GitHub 1st deployment test - 2026-10-03
-import requests
+import hashlib
+import hmac
 import os
 import re
-from datetime import date, datetime
+import threading
+import time
+from collections import deque
+from datetime import date, datetime, timedelta
+from urllib.parse import urlsplit
 
+import requests
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
@@ -36,15 +42,6 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # are already set take priority over the file.
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-DEMO_PASSWORD = "demo123"        # password for every seeded student/owner demo account
-
-# Set these securely in Render Environment Variables.
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "").strip()
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-
-EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-PHONE_RE = re.compile(r"^\d{10}$")
-
 
 def env_bool(name, default=False):
     val = os.environ.get(name)
@@ -53,8 +50,172 @@ def env_bool(name, default=False):
     return val.strip().lower() in ("1", "true", "yes", "on")
 
 
+def env_int(name, default, minimum=None, maximum=None):
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        value = int(default)
+    if minimum is not None:
+        value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value
+
+
+# A known fallback secret lets anyone forge session cookies. Refuse to start
+# without a real key instead. Generate one with:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+SECRET_KEY = (os.environ.get("SECRET_KEY") or "").strip()
+if len(SECRET_KEY) < 32:
+    raise SystemExit(
+        "SECRET_KEY is missing or too short. Set a random value of at least "
+        "32 characters in the environment (or .env) before starting HostelHub."
+    )
+
+DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "")  # only used by the optional demo seeder
+
+# Set these securely in Render Environment Variables.
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "").strip()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+PHONE_RE = re.compile(r"^\d{10}$")
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,40}$")
+
+SESSION_LIFETIME_HOURS = env_int("SESSION_LIFETIME_HOURS", 12, 1, 168)
+SESSION_LIFETIME_SECONDS = SESSION_LIFETIME_HOURS * 60 * 60
+
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.environ.get("SECRET_KEY") or "roomfinder-dev-secret-change-me"
+app.secret_key = SECRET_KEY
+app.permanent_session_lifetime = timedelta(hours=SESSION_LIFETIME_HOURS)
+app.config.update(
+    SESSION_COOKIE_NAME="hostelhub_session",
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=env_bool("SESSION_COOKIE_SECURE", False),
+    MAX_CONTENT_LENGTH=5 * 1024 * 1024,
+)
+
+# In-process, per-worker rate limiting. It is deliberately dependency-free;
+# deployments with multiple workers still get useful protection per process.
+_rate_lock = threading.Lock()
+_rate_events = {}
+
+
+def client_ip():
+    """Return the caller's address, honouring a trusted reverse proxy only."""
+    if env_bool("TRUST_PROXY", False):
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",", 1)[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def rate_limited(bucket, limit, window_seconds, key=None):
+    now = time.monotonic()
+    bucket_key = (bucket, key or client_ip())
+    with _rate_lock:
+        events = _rate_events.setdefault(bucket_key, deque())
+        while events and now - events[0] >= window_seconds:
+            events.popleft()
+        if len(events) >= limit:
+            return True
+        events.append(now)
+        if len(_rate_events) > 5000:
+            for old_key in [k for k, q in _rate_events.items() if not q]:
+                _rate_events.pop(old_key, None)
+    return False
+
+
+def same_origin(value):
+    if not value:
+        return False
+    try:
+        return urlsplit(value).netloc.lower() == request.host.lower()
+    except ValueError:
+        return False
+
+
+@app.before_request
+def protect_state_changing_requests():
+    """Reject obvious cross-site API writes (CSRF defence in depth)."""
+    if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+        return None
+    if not request.path.startswith("/api/"):
+        return None
+
+    origin = request.headers.get("Origin")
+    referer = request.headers.get("Referer")
+    if origin and not same_origin(origin):
+        return error("Cross-site request blocked.", 403)
+    if not origin and referer and not same_origin(referer):
+        return error("Cross-site request blocked.", 403)
+    if (
+        not origin
+        and not referer
+        and request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site"
+    ):
+        return error("Cross-site request blocked.", 403)
+    return None
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(self), camera=(), microphone=()"
+    )
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; base-uri 'self'; object-src 'none'; "
+        "frame-ancestors 'none'; form-action 'self'; "
+        "script-src 'self' https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "img-src 'self' data: blob: https:; "
+        "connect-src 'self' https://router.project-osrm.org "
+        "https://tiles.openfreemap.org https://*.openstreetmap.org https://unpkg.com; "
+        "worker-src 'self' blob:;",
+    )
+    if request.is_secure:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
+@app.errorhandler(413)
+def request_too_large(_exc):
+    if request.path.startswith("/api/"):
+        return error("That upload is too large.", 413)
+    return "Request entity too large", 413
+
+
+@app.errorhandler(404)
+def not_found(exc):
+    if request.path.startswith("/api/"):
+        return error("Not found.", 404)
+    return exc.get_response()
+
+
+def session_signature(row):
+    message = f"{row['id']}:{row['password_hash']}:{row['role']}:{row['status']}"
+    return hmac.new(
+        str(app.secret_key).encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def start_session(row):
+    session.clear()
+    session.permanent = True
+    session["user_id"] = row["id"]
+    session["auth_sig"] = session_signature(row)
+    session["auth_at"] = int(time.time())
 
 # ---------------------------------------------------------------- #
 # PostgreSQL connection settings (all from the environment / .env)
@@ -315,6 +476,12 @@ def create_schema(db):
 
 
 def insert_demo_data(db):
+    if not (DEMO_PASSWORD and ADMIN_USERNAME and ADMIN_PASSWORD):
+        raise RuntimeError(
+            "DEMO_PASSWORD, ADMIN_USERNAME and ADMIN_PASSWORD must all be set "
+            "before loading the demo dataset. Refusing to create accounts "
+            "with blank passwords."
+        )
     ph = generate_password_hash(DEMO_PASSWORD)
     ph_admin = generate_password_hash(ADMIN_PASSWORD)
     db.executemany(
@@ -336,7 +503,11 @@ def insert_demo_data(db):
 
 
 def seed(db):
-    """Wipe everything and rebuild with the original demo dataset (admin 'Reset')."""
+    """Wipe everything and rebuild with the optional demo dataset.
+
+    This is not used by the administrator reset endpoint, which keeps the
+    signed-in administrator account. Callers must explicitly opt in.
+    """
     db.executescript(
         "DROP TABLE IF EXISTS inquiries CASCADE; "
         "DROP TABLE IF EXISTS hostels CASCADE; "
@@ -365,20 +536,19 @@ def init_db():
 
         if ADMIN_USERNAME and ADMIN_PASSWORD:
             existing_admin = db.execute(
-                "SELECT id FROM users WHERE lower(username)=lower(%s)",
+                "SELECT id, role FROM users WHERE lower(username)=lower(%s)",
                 (ADMIN_USERNAME,),
             ).fetchone()
 
             if existing_admin:
-                db.execute(
-                    "UPDATE users "
-                    "SET role='admin', password_hash=%s, status='active' "
-                    "WHERE id=%s",
-                    (
-                        generate_password_hash(ADMIN_PASSWORD),
-                        existing_admin["id"],
-                    ),
-                )
+                # Never overwrite an existing account's password or silently
+                # promote it during boot. The admin must change credentials
+                # through the authenticated password flow.
+                if existing_admin["role"] != "admin":
+                    app.logger.warning(
+                        "Configured ADMIN_USERNAME matches a non-admin account; "
+                        "refusing to promote it automatically."
+                    )
             else:
                 db.execute(
                     """
@@ -412,12 +582,16 @@ def init_db():
 # matching the field names script.js already expects)
 # ---------------------------------------------------------------- #
 
-def user_public(row):
-    return {
+def user_public(row, include_contact=True):
+    data = {
         "id": row["id"], "name": row["name"], "username": row["username"],
         "email": row["email"], "phone": row["phone"], "role": row["role"],
         "joined": str(row["joined"]), "status": row["status"],
     }
+    if not include_contact:
+        data["email"] = ""
+        data["phone"] = ""
+    return data
 
 
 def hostel_public(row):
@@ -446,20 +620,179 @@ def inquiry_public(row):
     }
 
 
+ALLOWED_HOSTEL_TYPES = {"Boys Hostel", "Girls Hostel", "PG/Rooms"}
+ALLOWED_AMENITIES = {item["id"] for item in AMENITY_DEFS}
+ALLOWED_COLLEGES = set(COLLEGES)
+MAX_IMAGE_LENGTH = 4_000_000
+IMAGE_DATA_RE = re.compile(
+    r"^data:image/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$",
+    re.IGNORECASE,
+)
+IMAGE_URL_RE = re.compile(r"^https?://[^\s\"'<>]{1,2048}$", re.IGNORECASE)
+
+
+class ValidationError(ValueError):
+    pass
+
+
+def clean_image_value(value):
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise ValidationError("The listing image is invalid.")
+    value = value.strip()
+    if len(value) > MAX_IMAGE_LENGTH:
+        raise ValidationError("The listing image is too large.")
+    if value.startswith("data:image/"):
+        if not IMAGE_DATA_RE.match(value):
+            raise ValidationError("Please upload a PNG, JPEG, GIF or WebP image.")
+        return value
+    if not IMAGE_URL_RE.match(value):
+        raise ValidationError("Please provide a valid image URL.")
+    return value
+
+
+def listing_payload(data, existing=None):
+    """Validate and normalise the owner's listing form payload."""
+    existing = existing or {}
+
+    def text_value(key, fallback, limit, label):
+        raw = data.get(key, fallback)
+        if raw is None:
+            raw = fallback
+        raw = str(raw).strip()
+        if len(raw) > limit:
+            raise ValidationError(f"{label} is too long (maximum {limit} characters).")
+        return raw
+
+    def number_value(key, fallback, label, cast, minimum, maximum):
+        raw = data.get(key, fallback)
+        if raw in (None, ""):
+            raw = fallback
+        try:
+            value = cast(raw)
+        except (TypeError, ValueError):
+            raise ValidationError(f"Please enter a valid {label}.")
+        if value < minimum or value > maximum:
+            raise ValidationError(f"Please enter a valid {label}.")
+        return value
+
+    name = text_value("name", existing.get("name", ""), 120, "Property name")
+    location = text_value("location", existing.get("location", ""), 200, "Location")
+    if not name or not location:
+        raise ValidationError("Please fill in property name, location and rent.")
+
+    hostel_type = text_value("type", existing.get("type", "Boys Hostel"), 40, "Property type")
+    if hostel_type not in ALLOWED_HOSTEL_TYPES:
+        raise ValidationError("Please choose a valid property type.")
+
+    college = text_value("college", existing.get("college", COLLEGES[0]), 160, "College")
+    if college not in ALLOWED_COLLEGES:
+        raise ValidationError("Please choose a valid college.")
+
+    rent = number_value("rent", existing.get("rent", 0), "monthly rent", int, 1, 1_000_000)
+    rooms = number_value("rooms", existing.get("rooms", 1), "room count", int, 1, 10_000)
+    distance = number_value(
+        "distance", existing.get("distance", 0.5), "distance", float, 0, 1_000
+    )
+
+    amenities = data.get("amenities", None)
+    if amenities is None:
+        fallback = existing.get("amenities", "")
+        amenities = fallback.split(",") if isinstance(fallback, str) else []
+    if not isinstance(amenities, list):
+        raise ValidationError("Please choose valid amenities.")
+    cleaned_amenities = []
+    for amenity in amenities:
+        if not isinstance(amenity, str) or amenity not in ALLOWED_AMENITIES:
+            raise ValidationError("Please choose valid amenities.")
+        if amenity not in cleaned_amenities:
+            cleaned_amenities.append(amenity)
+
+    description = text_value(
+        "description", existing.get("description", "") or "", 2000, "Description"
+    )
+    image = clean_image_value(data.get("image", existing.get("image")))
+
+    latitude = data.get("latitude", existing.get("latitude"))
+    longitude = data.get("longitude", existing.get("longitude"))
+    if latitude in ("", None):
+        latitude = None
+    else:
+        try:
+            latitude = float(latitude)
+        except (TypeError, ValueError):
+            raise ValidationError("Please enter a valid latitude.")
+        if latitude < -90 or latitude > 90:
+            raise ValidationError("Please enter a valid latitude.")
+    if longitude in ("", None):
+        longitude = None
+    else:
+        try:
+            longitude = float(longitude)
+        except (TypeError, ValueError):
+            raise ValidationError("Please enter a valid longitude.")
+        if longitude < -180 or longitude > 180:
+            raise ValidationError("Please enter a valid longitude.")
+
+    return {
+        "name": name,
+        "type": hostel_type,
+        "college": college,
+        "location": location,
+        "distance": distance,
+        "latitude": latitude,
+        "longitude": longitude,
+        "rent": rent,
+        "rooms": rooms,
+        "amenities": ",".join(cleaned_amenities),
+        "description": description,
+        "image": image,
+    }
+
+
 # ---------------------------------------------------------------- #
 # Auth helpers
 # ---------------------------------------------------------------- #
 
 def current_user():
     uid = session.get("user_id")
-    if not uid:
+    signature = session.get("auth_sig")
+    issued_at = session.get("auth_at")
+    if not uid or not signature or not issued_at:
+        session.clear()
         return None
+
+    try:
+        issued_at = int(issued_at)
+    except (TypeError, ValueError):
+        session.clear()
+        return None
+
+    if time.time() - issued_at > SESSION_LIFETIME_SECONDS:
+        session.clear()
+        return None
+
     row = get_db().execute("SELECT * FROM users WHERE id=%s", (uid,)).fetchone()
+    if not row or row["status"] != "active":
+        session.clear()
+        return None
+
+    if not hmac.compare_digest(signature, session_signature(row)):
+        session.clear()
+        return None
+
     return row
 
 
 def error(message, code=400):
     return jsonify({"error": message}), code
+
+
+def rate_limit_error(retry_after=300):
+    response, status = error("Too many attempts. Please try again later.", 429)
+    response.headers["Retry-After"] = str(retry_after)
+    return response, status
 
 
 def require_login():
@@ -514,11 +847,16 @@ def api_geocode():
     if err:
         return err
 
+    if rate_limited("geocode", 30, 3600, key=str(user["id"])):
+        return rate_limit_error(3600)
+
     data = request.get_json(silent=True) or {}
     address = str(data.get("address", "")).strip()
 
     if not address:
         return error("Please enter a location.", 400)
+    if len(address) > 240:
+        return error("Please enter a shorter location.", 400)
 
     try:
         response = requests.get(
@@ -573,16 +911,142 @@ def api_meta():
 
 @app.get("/api/state")
 def api_state():
+    """Return only the slice of platform data the current caller may see.
+
+    Guests receive public, live listings plus owner display names. Students
+    receive their own inquiries and the owners they can contact. Owners get
+    their own listings and the students who contacted them. Administrators
+    receive the full dataset.
+    """
     db = get_db()
-    users = [user_public(r) for r in db.execute("SELECT * FROM users").fetchall()]
-    hostels_rows = db.execute("""
+    user = current_user()
+    role = user["role"] if user else None
+
+    stats_row = db.execute("""
+        SELECT
+            (SELECT COUNT(*) FROM users WHERE role='owner') AS owner_count,
+            (SELECT COUNT(*) FROM users WHERE role='student') AS student_count,
+            (SELECT COUNT(*) FROM hostels WHERE status='verified') AS verified_hostels,
+            (SELECT COUNT(*) FROM hostels) AS total_hostels,
+            (SELECT COUNT(*) FROM inquiries) AS total_inquiries,
+            (SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)
+               FROM hostels WHERE status='verified') AS average_rating
+    """).fetchone()
+    stats = {
+        "ownerCount": int(stats_row["owner_count"] or 0),
+        "studentCount": int(stats_row["student_count"] or 0),
+        "verifiedHostels": int(stats_row["verified_hostels"] or 0),
+        "totalHostels": int(stats_row["total_hostels"] or 0),
+        "totalInquiries": int(stats_row["total_inquiries"] or 0),
+        "averageRating": float(stats_row["average_rating"] or 0),
+    }
+
+    hostel_select = """
         SELECT h.*, u.phone AS owner_phone, u.name AS owner_name
         FROM hostels h
         LEFT JOIN users u ON u.id = h.owner_id
-    """).fetchall()
-    hostels = [hostel_public(r) for r in hostels_rows]
-    inquiries = [inquiry_public(r) for r in db.execute("SELECT * FROM inquiries").fetchall()]
-    return jsonify({"users": users, "hostels": hostels, "inquiries": inquiries})
+    """
+
+    if role == "admin":
+        user_rows = db.execute("SELECT * FROM users ORDER BY id").fetchall()
+        users = [user_public(r) for r in user_rows]
+        hostels = [
+            hostel_public(r)
+            for r in db.execute(hostel_select + " ORDER BY h.id").fetchall()
+        ]
+        inquiries = [
+            inquiry_public(r)
+            for r in db.execute("SELECT * FROM inquiries ORDER BY id").fetchall()
+        ]
+
+    elif role == "owner":
+        users = [user_public(user)]
+        inquiries = [
+            inquiry_public(r)
+            for r in db.execute(
+                "SELECT i.* FROM inquiries i "
+                "JOIN hostels h ON h.id = i.hostel_id "
+                "WHERE h.owner_id=%s ORDER BY i.id",
+                (user["id"],),
+            ).fetchall()
+        ]
+        student_ids = sorted({i["studentId"] for i in inquiries})
+        if student_ids:
+            users.extend(
+                user_public(r)
+                for r in db.execute(
+                    "SELECT * FROM users WHERE id = ANY(%s) ORDER BY id",
+                    (student_ids,),
+                ).fetchall()
+            )
+        hostels = [
+            hostel_public(r)
+            for r in db.execute(
+                hostel_select + " WHERE h.owner_id=%s ORDER BY h.id",
+                (user["id"],),
+            ).fetchall()
+        ]
+
+    elif role == "student":
+        users = [user_public(user)]
+        inquiries = [
+            inquiry_public(r)
+            for r in db.execute(
+                "SELECT * FROM inquiries WHERE student_id=%s ORDER BY id",
+                (user["id"],),
+            ).fetchall()
+        ]
+        inquiries_for_hostels = sorted({i["hostelId"] for i in inquiries})
+        visible_condition = "(h.status='verified' AND h.live=TRUE)"
+        params = []
+        if inquiries_for_hostels:
+            visible_condition += " OR h.id = ANY(%s)"
+            params.append(inquiries_for_hostels)
+        hostels = [
+            hostel_public(r)
+            for r in db.execute(
+                hostel_select + f" WHERE {visible_condition} ORDER BY h.id",
+                tuple(params),
+            ).fetchall()
+        ]
+        owner_ids = sorted({h["ownerId"] for h in hostels})
+        if owner_ids:
+            users.extend(
+                user_public(r, include_contact=False)
+                for r in db.execute(
+                    "SELECT * FROM users WHERE id = ANY(%s) AND role='owner' ORDER BY id",
+                    (owner_ids,),
+                ).fetchall()
+            )
+
+    else:
+        hostels = [
+            hostel_public(r)
+            for r in db.execute(
+                hostel_select
+                + " WHERE h.status='verified' AND h.live=TRUE ORDER BY h.id"
+            ).fetchall()
+        ]
+        owner_ids = sorted({h["ownerId"] for h in hostels})
+        users = []
+        if owner_ids:
+            users = [
+                user_public(r, include_contact=False)
+                for r in db.execute(
+                    "SELECT * FROM users WHERE id = ANY(%s) AND role='owner' ORDER BY id",
+                    (owner_ids,),
+                ).fetchall()
+            ]
+        inquiries = []
+
+    return jsonify(
+        {
+            "users": users,
+            "hostels": hostels,
+            "inquiries": inquiries,
+            "stats": stats,
+        }
+    )
 
 @app.route("/history")
 def history():
@@ -708,7 +1172,7 @@ def history():
       </a>
       <span class="hh-hist-tag">Admin console</span>
       <div class="hh-hist-topbar-actions">
-        <button class="hh-hist-btn" type="button" onclick="window.location.reload()" aria-label="Refresh today's counts">
+        <a class="hh-hist-btn" href="/history" aria-label="Refresh today's counts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 11a8.1 8.1 0 0 0-15.5-3.4L4 9"></path>
             <path d="M4 4v5h5"></path>
@@ -716,7 +1180,7 @@ def history():
             <path d="M20 20v-5h-5"></path>
           </svg>
           <span>Refresh</span>
-        </button>
+        </a>
         <a class="hh-hist-btn hh-hist-btn-gold" href="/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M15 18l-6-6 6-6"></path>
@@ -809,6 +1273,9 @@ def api_me():
 @app.post("/api/auth/login")
 
 def api_login():
+    if rate_limited("login", 10, 300):
+        return rate_limit_error(300)
+
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
@@ -823,11 +1290,8 @@ def api_login():
         (username,)
     ).fetchone()
 
-    if not row:
-        return error("No account found with that username.")
-
-    if not check_password_hash(row["password_hash"], password):
-        return error("Incorrect password.")
+    if not row or not check_password_hash(row["password_hash"], password):
+        return error("Invalid username or password.", 401)
 
     if row["status"] == "inactive":
         return error("This account has been deactivated. Contact an administrator.")
@@ -849,13 +1313,16 @@ def api_login():
             409
         )
 
-    session["user_id"] = row["id"]
+    start_session(row)
     return jsonify({"user": user_public(row)})
 
 
 
 @app.post("/api/auth/signup")
 def api_signup():
+    if rate_limited("signup", 5, 600):
+        return rate_limit_error(600)
+
     data = request.get_json(silent=True) or {}
 
     name = (data.get("name") or "").strip()
@@ -875,7 +1342,16 @@ def api_signup():
     if not name or not username or not email or not phone or not password or not confirm:
         return error("Please fill in all required fields.")
 
-    if not EMAIL_RE.match(email):
+    if len(name) > 100:
+        return error("Name is too long (maximum 100 characters).")
+
+    if not USERNAME_RE.match(username):
+        return error(
+            "Username must be 3-40 characters and use only letters, "
+            "numbers, dots, dashes or underscores."
+        )
+
+    if len(email) > 254 or not EMAIL_RE.match(email):
         return error("Please enter a valid email address (e.g. name@example.com).")
 
     if not PHONE_RE.match(phone):
@@ -884,8 +1360,11 @@ def api_signup():
             "with no letters or symbols."
         )
 
-    if len(password) < 6:
-        return error("Password must be at least 6 characters.")
+    if len(password) < 8:
+        return error("Password must be at least 8 characters.")
+
+    if len(password) > 128:
+        return error("Password is too long (maximum 128 characters).")
 
     if password != confirm:
         return error("Passwords do not match.")
@@ -935,7 +1414,7 @@ def api_signup():
         (new_id,),
     ).fetchone()
 
-    session["user_id"] = row["id"]
+    start_session(row)
 
     return jsonify({"user": user_public(row)}), 201
 @app.post("/api/auth/logout")
@@ -956,6 +1435,8 @@ def api_update_profile():
 
     if not name or not email or not phone:
         return error("Name, email and phone are required.")
+    if len(name) > 100 or len(email) > 254:
+        return error("Please keep your name and email address within the allowed length.")
     if not EMAIL_RE.match(email):
         return error("Please enter a valid email address (e.g. name@example.com).")
     if not PHONE_RE.match(phone):
@@ -981,12 +1462,16 @@ def api_update_password():
         return error("Please fill in both password fields.")
     if not check_password_hash(user["password_hash"], current_password):
         return error("Your current password is incorrect.")
-    if len(new_password) < 6:
-        return error("New password must be at least 6 characters.")
+    if len(new_password) < 8:
+        return error("New password must be at least 8 characters.")
+    if len(new_password) > 128:
+        return error("New password is too long (maximum 128 characters).")
 
     db = get_db()
     db.execute("UPDATE users SET password_hash=%s WHERE id=%s", (generate_password_hash(new_password), user["id"]))
     db.commit()
+    updated = db.execute("SELECT * FROM users WHERE id=%s", (user["id"],)).fetchone()
+    start_session(updated)
     return jsonify({"ok": True})
 
 
@@ -1006,12 +1491,10 @@ def api_create_hostel():
 
     data = request.get_json(silent=True) or {}
 
-    name = (data.get("name") or "").strip()
-    location = (data.get("location") or "").strip()
-    rent = data.get("rent")
-
-    if not name or not location or not rent:
-        return error("Please fill in property name, location and rent.")
+    try:
+        fields = listing_payload(data)
+    except ValidationError as exc:
+        return error(str(exc))
 
     db = get_db()
 
@@ -1023,19 +1506,19 @@ def api_create_hostel():
         "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,4.0,'pending',FALSE,0,%s,%s,%s) "
         "RETURNING id",
         (
-            name,
-            data.get("type", "Boys Hostel"),
+            fields["name"],
+            fields["type"],
             user["id"],
-            data.get("college", COLLEGES[0]),
-            location,
-            float(data.get("distance") or 0.5),
-            data.get("latitude"),
-            data.get("longitude"),
-            int(rent),
-            int(data.get("rooms") or 1),
-            ",".join(data.get("amenities") or []),
-            (data.get("description") or "").strip(),
-            data.get("image"),
+            fields["college"],
+            fields["location"],
+            fields["distance"],
+            fields["latitude"],
+            fields["longitude"],
+            fields["rent"],
+            fields["rooms"],
+            fields["amenities"],
+            fields["description"],
+            fields["image"],
         ),
     )
 
@@ -1063,12 +1546,10 @@ def api_update_hostel(hostel_id):
 
     data = request.get_json(silent=True) or {}
 
-    name = (data.get("name") or h["name"]).strip()
-    location = (data.get("location") or h["location"]).strip()
-    rent = data.get("rent", h["rent"])
-
-    if not name or not location or not rent:
-        return error("Please fill in property name, location and rent.")
+    try:
+        fields = listing_payload(data, existing=h)
+    except ValidationError as exc:
+        return error(str(exc))
 
     db.execute(
         "UPDATE hostels SET "
@@ -1077,23 +1558,18 @@ def api_update_hostel(hostel_id):
         "description=%s, amenities=%s, image=%s "
         "WHERE id=%s",
         (
-            name,
-            data.get("type", h["type"]),
-            data.get("college", h["college"]),
-            float(data.get("distance", h["distance"])),
-            location,
-            data.get("latitude", h["latitude"]),
-            data.get("longitude", h["longitude"]),
-            int(rent),
-            int(data.get("rooms", h["rooms"])),
-            (data.get("description", h["description"]) or "").strip(),
-            ",".join(
-                data.get(
-                    "amenities",
-                    h["amenities"].split(",")
-                )
-            ),
-            data.get("image", h["image"]),
+            fields["name"],
+            fields["type"],
+            fields["college"],
+            fields["distance"],
+            fields["location"],
+            fields["latitude"],
+            fields["longitude"],
+            fields["rent"],
+            fields["rooms"],
+            fields["description"],
+            fields["amenities"],
+            fields["image"],
             hostel_id,
         ),
     )
@@ -1174,9 +1650,12 @@ def api_contact_owner(hostel_id):
         return error("Please log in to contact the hostel owner.", 401)
     if user["role"] != "student":
         return error("Only students can send inquiries to hostel owners.", 403)
+    if rate_limited("contact", 20, 3600, key=str(user["id"])):
+        return rate_limit_error(3600)
+
     db = get_db()
     h = hostel_or_404(db, hostel_id)
-    if not h:
+    if not h or h["status"] != "verified" or not h["live"]:
         return error("Listing not found.", 404)
 
     existing = db.execute(
@@ -1185,6 +1664,8 @@ def api_contact_owner(hostel_id):
     ).fetchone()
 
     owner = db.execute("SELECT * FROM users WHERE id=%s", (h["owner_id"],)).fetchone()
+    if not owner:
+        return error("The property owner could not be reached.", 404)
 
     if existing:
         return jsonify({"created": False, "owner": user_public(owner)})
@@ -1192,6 +1673,13 @@ def api_contact_owner(hostel_id):
     message = (request.get_json(silent=True) or {}).get(
         "message", "Hi, I'm interested in this hostel — could you share more details?"
     )
+    if not isinstance(message, str):
+        return error("Please enter a valid message.")
+    message = message.strip()
+    if len(message) > 2000:
+        return error("Message is too long (maximum 2000 characters).")
+    if not message:
+        message = "Hi, I'm interested in this hostel — could you share more details?"
     db.execute(
         "INSERT INTO inquiries (student_id, hostel_id, status, date, message) VALUES (%s,%s,%s,%s,%s)",
         (user["id"], hostel_id, "pending", date.today().isoformat(), message),
@@ -1274,6 +1762,16 @@ def api_reset():
             403,
         )
 
+    if rate_limited("reset", 3, 3600, key=str(user["id"])):
+        return rate_limit_error(3600)
+
+    body = request.get_json(silent=True) or {}
+    confirmation = body.get("password") or ""
+    if not confirmation or not check_password_hash(
+        user["password_hash"], confirmation
+    ):
+        return error("Administrator password confirmation failed.", 403)
+
     db = get_db()
 
     try:
@@ -1326,18 +1824,26 @@ def api_add_review(hostel_id):
     user, err = require_role("student")
     if err:
         return err
+    if rate_limited("review", 10, 3600, key=str(user["id"])):
+        return rate_limit_error(3600)
+
     body = request.get_json(silent=True) or {}
     try:
         rating = int(body.get("rating", 0))
     except (ValueError, TypeError):
         return error("Invalid rating value.", 400)
-    comment = (body.get("comment") or "").strip()
+    comment = (body.get("comment") or "").strip() if isinstance(body.get("comment", ""), str) else ""
     if rating < 1 or rating > 5:
         return error("Rating must be between 1 and 5.", 400)
     if not comment:
         return error("Please provide a review comment.", 400)
+    if len(comment) > 2000:
+        return error("Review is too long (maximum 2000 characters).", 400)
 
     db = get_db()
+    hostel = hostel_or_404(db, hostel_id)
+    if not hostel or hostel["status"] != "verified" or not hostel["live"]:
+        return error("Listing not found.", 404)
     existing = db.execute("SELECT id FROM reviews WHERE student_id=%s AND hostel_id=%s", (user["id"], hostel_id)).fetchone()
     if existing:
         db.execute("UPDATE reviews SET rating=%s, comment=%s, created_at=CURRENT_TIMESTAMP WHERE id=%s", (rating, comment, existing["id"]))
@@ -1368,11 +1874,16 @@ def api_toggle_wishlist(hostel_id):
     if err:
         return err
     db = get_db()
+    hostel = hostel_or_404(db, hostel_id)
+    if not hostel:
+        return error("Listing not found.", 404)
     row = db.execute("SELECT id FROM wishlists WHERE student_id=%s AND hostel_id=%s", (user["id"], hostel_id)).fetchone()
     if row:
         db.execute("DELETE FROM wishlists WHERE id=%s", (row["id"],))
         saved = False
     else:
+        if hostel["status"] != "verified" or not hostel["live"]:
+            return error("Listing not found.", 404)
         db.execute("INSERT INTO wishlists (student_id, hostel_id) VALUES (%s, %s) ON CONFLICT (student_id, hostel_id) DO NOTHING", (user["id"], hostel_id))
         saved = True
     db.commit()
@@ -1385,9 +1896,6 @@ def api_toggle_wishlist(hostel_id):
 init_db()
 
 if __name__ == "__main__":
-    if not os.environ.get("SECRET_KEY"):
-        print("WARNING: SECRET_KEY is not set -- using the insecure development default. "
-              "Set it in .env before deploying.")
     app.run(
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "5000")),
