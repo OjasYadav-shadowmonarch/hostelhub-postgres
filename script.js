@@ -9,13 +9,45 @@
 
 /* ---------------------- API helper ---------------------- */
 
+function readCookie(name) {
+  const prefix = name + "=";
+  return document.cookie
+    .split(";")
+    .map(part => part.trim())
+    .find(part => part.startsWith(prefix))
+    ?.slice(prefix.length) || "";
+}
+
+async function ensureCsrfToken() {
+  const existing = readCookie("hostelhub_csrf");
+  if (existing) return existing;
+
+  const res = await fetch("/api/csrf", { credentials: "same-origin", cache: "no-store" });
+  if (!res.ok) throw new Error("Could not obtain a security token.");
+  const data = await res.json().catch(() => ({}));
+  const token = data.token || readCookie("hostelhub_csrf");
+  if (!token) throw new Error("Could not obtain a security token.");
+  return token;
+}
+
 async function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
   const opts = {
-    method: options.method || "GET",
+    method,
     headers: { "Content-Type": "application/json" },
-    credentials: "same-origin"
+    credentials: "same-origin",
+    cache: "no-store"
   };
   if (options.body !== undefined) opts.body = JSON.stringify(options.body);
+
+  if (method !== "GET" && method !== "HEAD") {
+    try {
+      opts.headers["X-CSRF-Token"] = await ensureCsrfToken();
+    } catch (csrfErr) {
+      showToast("Security check failed. Refresh the page and try again.", "error");
+      throw csrfErr;
+    }
+  }
 
   let res, data;
   try {
@@ -42,11 +74,11 @@ let AMENITY_DEFS = [];
 
 function emptyState() {
   return {
-    users: [], hostels: [], inquiries: [],
+    users: [], hostels: [], inquiries: [], stats: null,
     currentUser: null,
     // "landing" = public home page, "auth" = login/signup card, "app" = logged-in / guest app
     screen: "landing",
-    // which portal's login/signup is in view: "student" | "owner" | "admin"
+    // which portal's login/signup is in view: "student" | "owner"
     activePortal: "student",
     authMode: "login", // "login" | "signup" — only meaningful while screen === "auth"
     guestBrowsing: false,
@@ -69,9 +101,10 @@ let state = emptyState();
 /* Re-pull users/hostels/inquiries from the backend into the local cache. */
 async function refreshState() {
   const fresh = await api("/state");
-  state.users = fresh.users;
-  state.hostels = fresh.hostels;
-  state.inquiries = fresh.inquiries;
+  state.users = fresh.users || [];
+  state.hostels = fresh.hostels || [];
+  state.inquiries = fresh.inquiries || [];
+  state.stats = fresh.stats || null;
   if (state.currentUser && state.currentUser.role === "student") {
     try {
       const wl = await api("/wishlist");
@@ -161,12 +194,53 @@ const PORTAL_COPY = {
   }
 };
 
+// Editorial panel shown beside the auth form. Copy only — no workflow change.
+const AUTH_ASIDE = {
+  student: {
+    eyebrow: "For students",
+    title: "Your next home,<br><em>already waiting.</em>",
+    text: "Search verified hostels near your college, compare what matters and talk to the owner directly.",
+    points: ["Verified listings, no brokers", "Save and compare up to 3 hostels", "Contact owners in one tap"]
+  },
+  owner: {
+    eyebrow: "For property owners",
+    title: "Fill your rooms.<br><em>Skip the middlemen.</em>",
+    text: "Publish your property, show it on the map and receive inquiries from students who are ready to move.",
+    points: ["Free owner dashboard", "Manage listings and availability", "Inquiries land straight with you"]
+  },
+  admin: {
+    eyebrow: "For administrators",
+    title: "Keep the platform<br><em>trustworthy.</em>",
+    text: "Review new listings, moderate the marketplace and keep HostelHub accurate for every student.",
+    points: ["Approve or reject listings", "Monitor owners and students", "One clear control panel"]
+  }
+};
+
+// Small inline icons keep the auth controls crisp without extra asset requests.
+const AUTH_ICONS = {
+  student: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`,
+  owner: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/><path d="M9.5 21v-6h5v6"/></svg>`,
+  admin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>`,
+  user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`,
+  at: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></svg>`,
+  mail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`,
+  phone: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6.2 6.2l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg>`,
+  lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`
+};
+
+const AUTH_PORTALS = [
+  { id: "student", label: "Student", icon: AUTH_ICONS.student },
+  { id: "owner", label: "Owner", icon: AUTH_ICONS.owner }
+];
+
 function showLandingScreen() {
   closeModal();
   state.screen = "landing";
   $("#landingScreen").hidden = false;
   $("#authScreen").hidden = true;
   $("#mainApp").hidden = true;
+  const footer = $("#siteFooter");
+  if (footer) footer.hidden = false;
   renderLandingStats();
   renderLandingPreview();
   renderLandingNavActions();
@@ -194,35 +268,45 @@ function renderLandingNavActions() {
       <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
     `;
   }
+  syncThemeUI();
 }
 
 function renderLandingStats() {
-  const verifiedCount = state.hostels.filter(h => h.status === "verified").length;
+  const stats = state.stats || {};
+  const rated = state.hostels.filter(h => h.status === "verified" && typeof h.rating === "number");
+  const fallbackRating = rated.length
+    ? rated.reduce((sum, h) => sum + h.rating, 0) / rated.length
+    : 0;
+  const verifiedCount = stats.verifiedHostels ?? state.hostels.filter(h => h.status === "verified").length;
   const collegeCount = COLLEGES.length;
-  const ownerCount = state.users.filter(u => u.role === "owner").length;
+  const ownerCount = stats.ownerCount ?? state.users.filter(u => u.role === "owner").length;
+  const avgRating = stats.averageRating ?? fallbackRating;
   $("#landingStats").innerHTML = `
     <div class="landing-stat-chip"><b data-count="${verifiedCount}">0</b><span>VERIFIED HOSTELS</span></div>
     <div class="landing-stat-chip"><b data-count="${collegeCount}">0</b><span>COLLEGES COVERED</span></div>
     <div class="landing-stat-chip"><b data-count="${ownerCount}">0</b><span>LISTED OWNERS</span></div>
+    <div class="landing-stat-chip"><b data-count="${avgRating}" data-decimals="1">0</b><span>AVERAGE RATING</span></div>
   `;
   animateLandingCounters();
 }
 
 // Animates each stat chip's number from 0 up to its real (backend-derived)
 // value. Purely a presentation layer on top of renderLandingStats() — the
-// counted values themselves still come straight from state.hostels / COLLEGES
-// / state.users above, nothing here is hard-coded.
+// counted values themselves still come from the scoped state payload, so
+// nothing here is hard-coded and no private user records are exposed.
 function animateLandingCounters() {
   const nodes = document.querySelectorAll("#landingStats b[data-count]");
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   nodes.forEach((el) => {
     const target = Number(el.dataset.count) || 0;
-    if (reduceMotion || !target) { el.textContent = target; return; }
+    const decimals = Number(el.dataset.decimals) || 0;
+    if (reduceMotion || !target) { el.textContent = target.toFixed(decimals); return; }
     const duration = 700;
     const start = performance.now();
     function tick(now) {
       const progress = Math.min(1, (now - start) / duration);
-      el.textContent = Math.round(target * (1 - Math.pow(1 - progress, 3)));
+      const value = target * (1 - Math.pow(1 - progress, 3));
+      el.textContent = decimals ? value.toFixed(decimals) : Math.round(value);
       if (progress < 1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -247,22 +331,23 @@ function renderLandingPreview() {
   }
 
   el.innerHTML = featured.map(h => {
-    const amenityChips = (h.amenities || []).slice(0, 4).map(id => {
+    const amenityChips = (h.amenities || []).slice(0, 3).map(id => {
       const a = amenityLabel(id);
       return a ? `<span>${a.icon} ${esc(a.label)}</span>` : "";
     }).join("");
     return `
       <div class="l-preview-card">
         <div class="l-preview-media">
-          🏠
+          ${hostelThumbHTML(h)}
           <span class="l-preview-badge">✓ Verified</span>
+          <span class="l-preview-type">${esc(h.type)}</span>
         </div>
         <div class="l-preview-body">
           <div class="l-preview-top">
             <h3>${esc(h.name)}</h3>
             <span class="l-preview-rating">★ ${h.rating.toFixed(1)}</span>
           </div>
-          <p class="l-preview-loc">${h.distance} km from college · ${esc(h.type)}</p>
+          <p class="l-preview-loc">${h.distance} km from college · ${esc(h.college || h.location)}</p>
           <div class="l-preview-amenities">${amenityChips}</div>
           <div class="l-preview-foot">
             <strong>₹${h.rent.toLocaleString("en-IN")}<span>/month</span></strong>
@@ -317,6 +402,9 @@ function initLandingScrollReveal() {
 }
 
 function showAuthScreen(portal, mode) {
+  // There is no separate admin portal — admins use the same sign-in form
+  // as students and owners, regardless of which portal they start from.
+  portal = portal === "owner" ? "owner" : "student";
   state.screen = "auth";
   state.activePortal = portal;
   state.authMode = mode;
@@ -324,67 +412,267 @@ function showAuthScreen(portal, mode) {
   $("#landingScreen").hidden = true;
   $("#mainApp").hidden = true;
   $("#authScreen").hidden = false;
+  const footer = $("#siteFooter");
+  if (footer) footer.hidden = true;
   renderAuthCard();
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function renderAuthCard() {
   const portal = state.activePortal;
   const copy = PORTAL_COPY[portal];
+  const aside = AUTH_ASIDE[portal] || AUTH_ASIDE.student;
   const isSignup = state.authMode === "signup";
-  const backLink = `<div class="auth-back-link"><a href="#" data-action="back-to-landing">← Back to HostelHub</a></div>`;
+  const backLink = `<div class="auth-back-link"><a href="#" data-action="back-to-landing"><span aria-hidden="true">←</span> Back to HostelHub</a></div>`;
 
+  const portalTabs = AUTH_PORTALS.map(({ id, label, icon }) => `
+    <button type="button" class="auth-portal-tab${portal === id ? " is-active" : ""}"
+      data-action="switch-portal" data-id="${id}" aria-pressed="${portal === id}">
+      ${icon}<span>${label}</span>
+    </button>`).join("");
 
   const pendingHostel = state.pendingContactHostelId ? findHostel(state.pendingContactHostelId) : null;
   const pendingNotice = pendingHostel ? `
-    <div style="background:var(--gold-dim); border:1px solid var(--gold-soft); color:var(--gold-text); border-radius:var(--radius-sm); padding:10px 14px; margin: -10px 0 18px; font-size:13px; text-align:center; line-height:1.5;">
-      ℹ️ Please log in to contact the owner of <strong>${esc(pendingHostel.name)}</strong>.
+    <div class="auth-notice">
+      <span class="auth-notice-icon" aria-hidden="true">ℹ</span>
+      <span>Please log in to contact the owner of <strong>${esc(pendingHostel.name)}</strong>.</span>
     </div>
   ` : "";
+
+  const asidePoints = aside.points.map(point => `
+    <li>
+      <span class="auth-aside-check" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m5 12.5 4.2 4.2L19 7"></path>
+        </svg>
+      </span>
+      ${point}
+    </li>`).join("");
+
+  const portalSwitcher = `<nav class="auth-portals" aria-label="Choose your portal">${portalTabs}</nav>`;
 
   let cardHTML;
   if (isSignup) {
     cardHTML = `
       <div class="auth-card">
-        <div class="auth-icon">➕</div>
-        <h1 class="auth-title">${esc(copy.signupTitle)}</h1>
-        <p class="auth-subtitle">${esc(copy.signupSubtitle)}</p>
+        ${portalSwitcher}
+        <div class="auth-card-head">
+          <span class="auth-icon" aria-hidden="true">${copy.icon}</span>
+          <div>
+            <span class="auth-kicker">New account</span>
+            <h1 class="auth-title">${esc(copy.signupTitle)}</h1>
+            <p class="auth-subtitle">${esc(copy.signupSubtitle)}</p>
+          </div>
+        </div>
         ${pendingNotice}
 
-        <div class="field-group"><label for="signupName">Full Name *</label><input type="text" id="signupName" placeholder="e.g. Rahul Sharma" /></div>
-        <div class="field-group"><label for="signupUsername">Username *</label><input type="text" id="signupUsername" placeholder="Choose a username" /></div>
-        <div class="field-group"><label for="signupEmail">Email *</label><input type="email" id="signupEmail" placeholder="your@email.com" /></div>
-        <div class="field-group"><label for="signupPhone">Phone *</label><input type="tel" id="signupPhone" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" /></div>
-        <div class="field-group"><label for="signupPassword">Password *</label>
-          <div class="password-field"><input type="password" id="signupPassword" placeholder="Min 6 characters" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="signupPassword">Show</button></div>
+        <div class="field-group auth-field">
+          <label for="signupName">Full Name *</label>
+          <div class="auth-control">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.user}</span>
+            <input type="text" id="signupName" placeholder="e.g. Rahul Sharma" autocomplete="name" />
+          </div>
         </div>
-        <div class="field-group"><label for="signupConfirm">Confirm Password *</label>
-          <div class="password-field"><input type="password" id="signupConfirm" placeholder="Re-enter password" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="signupConfirm">Show</button></div>
+        <div class="field-group auth-field">
+          <label for="signupUsername">Username *</label>
+          <div class="auth-control">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.at}</span>
+            <input type="text" id="signupUsername" placeholder="Choose a username" autocomplete="username" />
+          </div>
+        </div>
+        <div class="field-group auth-field">
+          <label for="signupEmail">Email *</label>
+          <div class="auth-control">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.mail}</span>
+            <input type="email" id="signupEmail" placeholder="your@email.com" autocomplete="email" />
+          </div>
+        </div>
+        <div class="field-group auth-field">
+          <label for="signupPhone">Phone *</label>
+          <div class="auth-control">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.phone}</span>
+            <input type="tel" id="signupPhone" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" autocomplete="tel" />
+          </div>
+        </div>
+        <div class="field-group auth-field">
+          <label for="signupPassword">Password *</label>
+          <div class="auth-control password-field">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.lock}</span>
+            <input type="password" id="signupPassword" placeholder="Min 8 characters" autocomplete="new-password" aria-describedby="signupStrength" />
+            <button type="button" class="eye-btn" data-action="toggle-password" data-id="signupPassword">Show</button>
+          </div>
+          <p class="auth-caps" hidden aria-live="polite">Caps Lock is on</p>
+          <div class="auth-strength" id="signupStrength" hidden aria-live="polite">
+            <span class="auth-strength-track"><span class="auth-strength-bar" data-strength-bar data-level="0"></span></span>
+            <span class="auth-strength-label" data-strength-label></span>
+          </div>
+        </div>
+        <div class="field-group auth-field">
+          <label for="signupConfirm">Confirm Password *</label>
+          <div class="auth-control password-field">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.lock}</span>
+            <input type="password" id="signupConfirm" placeholder="Re-enter password" autocomplete="new-password" aria-describedby="signupMatch" />
+            <button type="button" class="eye-btn" data-action="toggle-password" data-id="signupConfirm">Show</button>
+          </div>
+          <p class="auth-caps" hidden aria-live="polite">Caps Lock is on</p>
+          <p class="auth-match" id="signupMatch" hidden aria-live="polite"></p>
         </div>
 
-        <p class="form-error" id="authError" hidden></p>
-        <button class="btn btn-gold btn-block" data-action="signup">👤 Create Account</button>
+        <p class="form-error" id="authError" role="alert" hidden></p>
+        <button class="btn btn-gold btn-block btn-lg" data-action="signup">Create Account</button>
         <p class="switch-line">Already have an account? <a href="#" data-action="switch-auth-mode" data-id="login">Sign in</a></p>
       </div>`;
   } else {
     cardHTML = `
       <div class="auth-card">
-        <div class="auth-icon">${copy.icon}</div>
-        <h1 class="auth-title">${esc(copy.loginTitle)}</h1>
-        <p class="auth-subtitle">${esc(copy.loginSubtitle)}</p>
+        ${portalSwitcher}
+        <div class="auth-card-head">
+          <span class="auth-icon" aria-hidden="true">${copy.icon}</span>
+          <div>
+            <span class="auth-kicker">Secure sign-in</span>
+            <h1 class="auth-title">${esc(copy.loginTitle)}</h1>
+            <p class="auth-subtitle">${esc(copy.loginSubtitle)}</p>
+          </div>
+        </div>
         ${pendingNotice}
 
-        <div class="field-group"><label for="loginUsername">Username</label><input type="text" id="loginUsername" placeholder="Enter your username" autocomplete="username" /></div>
-        <div class="field-group"><label for="loginPassword">Password</label>
-          <div class="password-field"><input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="loginPassword">Show</button></div>
+        <div class="field-group auth-field">
+          <label for="loginUsername">Username</label>
+          <div class="auth-control">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.user}</span>
+            <input type="text" id="loginUsername" placeholder="Enter your username" autocomplete="username" />
+          </div>
+        </div>
+        <div class="field-group auth-field">
+          <label for="loginPassword">Password</label>
+          <div class="auth-control password-field">
+            <span class="auth-control-icon" aria-hidden="true">${AUTH_ICONS.lock}</span>
+            <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password" />
+            <button type="button" class="eye-btn" data-action="toggle-password" data-id="loginPassword">Show</button>
+          </div>
+          <p class="auth-caps" hidden aria-live="polite">Caps Lock is on</p>
         </div>
 
-        <p class="form-error" id="authError" hidden></p>
-        <button class="btn btn-gold btn-block" data-action="login">Sign In →</button>
-        ${copy.signupAllowed ? `<p class="switch-line">Don't have an account? <a href="#" data-action="switch-auth-mode" data-id="signup">Create one</a></p>` : `<div class="auth-portal-note">Admin accounts are provisioned by HostelHub — contact support for access.</div>`}
+        <p class="form-error" id="authError" role="alert" hidden></p>
+        <button class="btn btn-gold btn-block btn-lg" data-action="login">Sign In <span aria-hidden="true">→</span></button>
+        ${copy.signupAllowed ? `<p class="switch-line">Don't have an account? <a href="#" data-action="switch-auth-mode" data-id="signup">Create one</a></p><p class="auth-admin-hint">Administrators: sign in through either portal.</p>` : `<div class="auth-portal-note">Administrators can sign in through the Student or Owner portal.</div>`}
       </div>`;
   }
 
-  $("#authCardContainer").innerHTML = backLink + cardHTML;
+  $("#authCardContainer").innerHTML = `
+    <div class="auth-shell auth-shell-${portal}">
+      <aside class="auth-aside">
+        <div class="auth-aside-brand">
+          <span class="auth-aside-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 10.5 12 3l9 7.5"></path>
+              <path d="M5.5 9.5V21h13V9.5"></path>
+              <path d="M9.5 21v-6h5v6"></path>
+            </svg>
+          </span>
+          <span class="auth-aside-wordmark">Hostel<span>Hub</span></span>
+        </div>
+
+        <div class="auth-aside-content">
+          <span class="auth-aside-eyebrow"><span class="eyebrow-pulse" aria-hidden="true"></span>${aside.eyebrow}</span>
+          <h2 class="auth-aside-title">${aside.title}</h2>
+          <p class="auth-aside-text">${aside.text}</p>
+          <ul class="auth-aside-points">${asidePoints}</ul>
+        </div>
+
+        <div class="auth-aside-stats" aria-label="HostelHub at a glance">
+          <div><strong>₹0</strong><span>brokerage</span></div>
+          <div><strong>${COLLEGES.length || 9}</strong><span>campuses</span></div>
+          <div><strong>24/7</strong><span>access</span></div>
+        </div>
+      </aside>
+
+      <div class="auth-main">
+        ${backLink}
+        ${cardHTML}
+        <p class="auth-legal">Verified listings · Direct owner contact · Free for students</p>
+      </div>
+    </div>`;
+
+  enhanceAuthForm();
+}
+
+// Adds small, non-blocking form affordances: autofocus, caps-lock warning,
+// live password strength and confirm-password matching. None of this changes
+// the submit payloads or the existing validation in handleLogin/handleSignup.
+function enhanceAuthForm() {
+  const isSignup = state.authMode === "signup";
+  const focusTarget = isSignup ? $("#signupName") : $("#loginUsername");
+  const canAutofocus = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
+  if (focusTarget && canAutofocus) {
+    requestAnimationFrame(() => focusTarget.focus({ preventScroll: true }));
+  }
+
+  $all(".auth-card .password-field input").forEach(input => {
+    const warning = input.closest(".field-group")?.querySelector(".auth-caps");
+    if (!warning) return;
+    const update = (event) => {
+      warning.hidden = !(event.getModifierState && event.getModifierState("CapsLock"));
+    };
+    input.addEventListener("keydown", update);
+    input.addEventListener("keyup", update);
+    input.addEventListener("blur", () => { warning.hidden = true; });
+  });
+
+  if (!isSignup) return;
+
+  const password = $("#signupPassword");
+  const confirm = $("#signupConfirm");
+  const strength = $("#signupStrength");
+  const bar = strength?.querySelector("[data-strength-bar]");
+  const label = strength?.querySelector("[data-strength-label]");
+  const match = $("#signupMatch");
+
+  const updateMatch = () => {
+    if (!match || !confirm) return;
+    const value = confirm.value || "";
+    if (!value) { match.hidden = true; return; }
+    const matches = value === password.value;
+    match.hidden = false;
+    match.textContent = matches ? "Passwords match" : "Passwords do not match yet";
+    match.dataset.state = matches ? "match" : "mismatch";
+  };
+
+  const updateStrength = () => {
+    if (!password || !strength) return;
+    const value = password.value || "";
+    if (!value) {
+      strength.hidden = true;
+      if (bar) { bar.style.width = "0%"; bar.dataset.level = "0"; }
+      if (label) label.textContent = "";
+      updateMatch();
+      return;
+    }
+
+    let score = 0;
+    if (value.length >= 8) score++;
+    if (value.length >= 12) score++;
+    if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score++;
+    if (/\d/.test(value)) score++;
+    if (/[^A-Za-z0-9]/.test(value)) score++;
+    score = Math.min(score, 4);
+    if (value.length < 8) score = 0;
+
+    const levels = ["Too short", "Weak", "Fair", "Good", "Strong"];
+    strength.hidden = false;
+    if (bar) {
+      bar.style.width = `${score * 25}%`;
+      bar.dataset.level = String(score);
+    }
+    if (label) {
+      label.textContent = levels[score];
+      label.dataset.level = String(score);
+    }
+    updateMatch();
+  };
+
+  password?.addEventListener("input", updateStrength);
+  confirm?.addEventListener("input", updateMatch);
 }
 
 function switchAuthMode(mode) {
@@ -432,7 +720,7 @@ async function handleLogin() {
     if (err.status === 409) {
       // wrong portal for this (non-admin) account — offer to redirect
       const guessRole = state.activePortal === "student" ? "owner" : "student";
-      errorEl.innerHTML = err.message + ` <a href="#" data-action="switch-portal" data-id="${guessRole}">Switch portal →</a>`;
+      errorEl.innerHTML = esc(err.message) + ` <a href="#" data-action="switch-portal" data-id="${guessRole}">Switch portal →</a>`;
     } else {
       errorEl.textContent = err.message;
     }
@@ -472,8 +760,8 @@ async function handleSignup() {
     errorEl.hidden = false;
     return;
   }
-  if (password.length < 6) {
-    errorEl.textContent = "Password must be at least 6 characters.";
+  if (password.length < 8) {
+    errorEl.textContent = "Password must be at least 8 characters.";
     errorEl.hidden = false;
     return;
   }
@@ -505,7 +793,8 @@ async function handleSignup() {
 }
 
 function switchPortal(role) {
-  showAuthScreen(role, "login");
+  const nextMode = role === "admin" ? "login" : state.authMode;
+  showAuthScreen(role, nextMode);
 }
 
 async function logout() {
@@ -542,6 +831,8 @@ function enterApp() {
   $("#landingScreen").hidden = true;
   $("#authScreen").hidden = true;
   $("#mainApp").hidden = false;
+  const footer = $("#siteFooter");
+  if (footer) footer.hidden = false;
 
   const user = state.currentUser;
   const portal = state.guestBrowsing ? "student" : user.role;
@@ -612,6 +903,7 @@ function renderNavRight() {
       <span class="guest-chip">👤 Browsing as guest</span>
       <button class="btn btn-gold btn-sm" data-action="go-landing-login">Log In</button>
     `;
+    syncThemeUI();
     return;
   }
 
@@ -624,6 +916,7 @@ function renderNavRight() {
     </div>
     <button class="icon-btn" data-action="logout" title="Sign out">⏻</button>
   `;
+  syncThemeUI();
 }
 
 function setActiveNavTab(view) {
@@ -654,13 +947,27 @@ function navigate(view) {
   setActiveNavTab(view);
 }
 
+function syncThemeUI() {
+  const isLight = document.body.classList.contains("light-theme");
+  document.documentElement.style.colorScheme = isLight ? "light" : "dark";
+
+  $all('[data-action="toggle-theme"]').forEach(btn => {
+    const label = isLight ? "Switch to dark theme" : "Switch to light theme";
+    btn.textContent = isLight ? "🌙" : "☀️";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("aria-pressed", isLight ? "true" : "false");
+  });
+
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", isLight ? "#f7f4ed" : "#070a12");
+}
+
 function toggleTheme() {
   document.body.classList.toggle("light-theme");
   const isLight = document.body.classList.contains("light-theme");
   try { localStorage.setItem("hostelhub_theme", isLight ? "light" : "dark"); } catch (_) {}
-  $all('[data-action="toggle-theme"]').forEach(btn => {
-    btn.textContent = isLight ? "🌙" : "☀️";
-  });
+  syncThemeUI();
 }
 
 /* ---------------------- Shared components ---------------------- */
@@ -681,7 +988,7 @@ function statusBadge(status) {
 function hostelThumbHTML(hostel, sizeClass) {
   const typeIcon = hostel.type === "Boys Hostel" ? "🏠" : hostel.type === "Girls Hostel" ? "🏡" : "🛏️";
   return hostel.image
-    ? `<img src="${hostel.image}" alt="${esc(hostel.name)}" />`
+    ? `<img src="${esc(hostel.image)}" alt="${esc(hostel.name)}" loading="lazy" />`
     : typeIcon;
 }
 
@@ -736,7 +1043,12 @@ function studentFindHTML() {
   }
   if (state.searchQuery) {
     const q = state.searchQuery.toLowerCase();
-    results = results.filter(h => h.name.toLowerCase().includes(q) || h.location.toLowerCase().includes(q) || h.type.toLowerCase().includes(q));
+    results = results.filter(h =>
+      h.name.toLowerCase().includes(q) ||
+      h.location.toLowerCase().includes(q) ||
+      h.type.toLowerCase().includes(q) ||
+      String(h.college || "").toLowerCase().includes(q)
+    );
   }
   results = results.slice().sort((a, b) => b.rating - a.rating || b.views - a.views);
 
@@ -788,6 +1100,10 @@ function hostelCardHTML(h) {
   const checked = state.compareSelection.includes(h.id) ? "checked" : "";
   const isSaved = (state.wishlist || []).includes(h.id);
   const ratingStr = typeof h.rating === "number" ? h.rating.toFixed(1) : (h.rating || "4.0");
+  const amenityStrip = (h.amenities || []).slice(0, 3).map(id => {
+    const a = amenityLabel(id);
+    return a ? `<span class="hostel-amenity">${a.icon} ${esc(a.label)}</span>` : "";
+  }).join("");
   return `
     <div class="hostel-card">
       <div class="hostel-thumb" style="position:relative;">
@@ -798,6 +1114,7 @@ function hostelCardHTML(h) {
       <div class="hostel-body">
         <h3 class="hostel-name">${esc(h.name)}</h3>
         <div class="hostel-meta">📍 ${esc(h.location)} · ${h.distance}km away</div>
+        ${amenityStrip ? `<div class="hostel-amenities">${amenityStrip}</div>` : ""}
         <div class="hostel-rent">${currency(h.rent)}<span> /month</span></div>
         <div class="hostel-foot">
           <span class="rating">★ ${ratingStr}</span>
@@ -827,7 +1144,7 @@ function studentInquiriesHTML() {
   }).join("");
 
   const body = mine.length ? `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Hostel</th><th>Your message</th><th>Sent</th><th>Status</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -914,7 +1231,7 @@ function renderProfileView() {
           <div class="password-field"><input type="password" id="profileCurrentPassword" placeholder="Current password" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileCurrentPassword">Show</button></div>
         </div>
         <div class="field-group"><label for="profileNewPassword">New Password</label>
-          <div class="password-field"><input type="password" id="profileNewPassword" placeholder="Min 6 characters" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileNewPassword">Show</button></div>
+          <div class="password-field"><input type="password" id="profileNewPassword" placeholder="Min 8 characters" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileNewPassword">Show</button></div>
         </div>
         <div class="field-group"><label for="profileNewConfirm">Confirm New Password</label>
           <div class="password-field"><input type="password" id="profileNewConfirm" placeholder="Re-enter new password" /><button type="button" class="eye-btn" data-action="toggle-password" data-id="profileNewConfirm">Show</button></div>
@@ -976,8 +1293,8 @@ async function savePassword() {
     errorEl.hidden = false;
     return;
   }
-  if (newPassword.length < 6) {
-    errorEl.textContent = "New password must be at least 6 characters.";
+  if (newPassword.length < 8) {
+    errorEl.textContent = "New password must be at least 8 characters.";
     errorEl.hidden = false;
     return;
   }
@@ -1000,18 +1317,62 @@ async function savePassword() {
 
 /* ---------------------- Modals: hostel detail & compare ---------------------- */
 
+let lastFocusedElement = null;
+
+function modalFocusableElements() {
+  const modal = $("#modalBody");
+  if (!modal) return [];
+  return Array.from(modal.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+    'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(el => el.getClientRects().length > 0);
+}
+
 function openModal(html, extraClass) {
   const overlay = $("#modalOverlay");
   const body = $("#modalBody");
+  const wasClosed = overlay.hidden;
+  if (wasClosed) lastFocusedElement = document.activeElement;
+
   body.className = "modal" + (extraClass ? " " + extraClass : "");
   body.innerHTML = html;
   overlay.hidden = false;
+  document.body.classList.add("modal-open");
+
+  const title = body.querySelector(".modal-title");
+  if (title) {
+    title.id = title.id || "modalTitle";
+    body.setAttribute("aria-labelledby", title.id);
+    body.removeAttribute("aria-label");
+  } else {
+    body.removeAttribute("aria-labelledby");
+    body.setAttribute("aria-label", "Dialog");
+  }
+
+  body.querySelectorAll(".modal-close").forEach(button => {
+    if (!button.getAttribute("aria-label")) button.setAttribute("aria-label", "Close dialog");
+  });
+
+  window.requestAnimationFrame(() => {
+    const target = body.querySelector("[autofocus]") || modalFocusableElements()[0] || body;
+    target.focus();
+  });
 }
+
 function closeModal() {
-  $("#modalOverlay").hidden = true;
+  const overlay = $("#modalOverlay");
+  if (!overlay) return;
+  const wasOpen = !overlay.hidden;
+  overlay.hidden = true;
   $("#modalBody").innerHTML = "";
+  document.body.classList.remove("modal-open");
   state.editingHostelId = null;
   state.listingImageData = null;
+
+  if (wasOpen && lastFocusedElement && document.contains(lastFocusedElement)) {
+    lastFocusedElement.focus();
+  }
+  lastFocusedElement = null;
 }
 
 function openHostelDetail(id) {
@@ -1033,8 +1394,8 @@ function openHostelDetail(id) {
       <span class="type-chip">${esc(h.type)}</span>
       ${statusBadge(h.status)}
       <span class="rating detail-header-rating">★ ${ratingStr} rating</span>
-      <span class="badge" style="background:rgba(217,119,6,0.15); color:#f59e0b; border:1px solid rgba(217,119,6,0.3); padding:4px 8px; border-radius:12px; font-size:12px;">🍲 ${esc(h.foodType || "Veg & Non-Veg")}</span>
-      <span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:4px 8px; border-radius:12px; font-size:12px;">⏰ Curfew: ${esc(h.curfew || "10:00 PM")}</span>
+      <span class="badge detail-meta-badge detail-meta-food">🍲 ${esc(h.foodType || "Veg & Non-Veg")}</span>
+      <span class="badge detail-meta-badge detail-meta-curfew">⏰ Curfew: ${esc(h.curfew || "10:00 PM")}</span>
     </div>
     <div class="detail-stats">
       <div class="detail-stat"><b>${currency(h.rent)}</b><span>PER MONTH</span></div>
@@ -1082,7 +1443,7 @@ function openHostelDetail(id) {
     </div>
 
     ${state.currentUser && state.currentUser.role === 'student' ? `
-      <div class="add-review-box" style="margin-top:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+      <div class="add-review-box">
         <div style="font-weight:600; font-size:13px; margin-bottom:8px;">Leave a Review & Rating</div>
         <div class="star-rating-picker" id="reviewStarPicker" style="display:flex; gap:6px; margin-bottom:10px; font-size:22px;">
           <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
@@ -1102,6 +1463,26 @@ function openHostelDetail(id) {
 }
 
 /* ---------------------- Hostel detail map ---------------------- */
+function createRouteEndpointMarker(label, tone, labelSide) {
+  const element = document.createElement("div");
+  element.className =
+    `route-endpoint route-endpoint-${tone} route-endpoint-label-${labelSide}`;
+  element.setAttribute("role", "img");
+  element.setAttribute("aria-label", label.replace(" · ", ", "));
+  element.title = label;
+
+  const pin = document.createElement("span");
+  pin.className = "route-endpoint-pin";
+  pin.setAttribute("aria-hidden", "true");
+
+  const text = document.createElement("span");
+  text.className = "route-endpoint-label";
+  text.textContent = label;
+
+  element.append(pin, text);
+  return element;
+}
+
 function initializeHostelDetailMap(hostel) {
   const mapElement = document.getElementById("hostelDetailMap");
 
@@ -1183,6 +1564,9 @@ const directionsButton =
 const directionsStatus =
   directionsPanel.querySelector("#hostelDirectionsStatus");
 
+let routeStartMarker = null;
+let routeDestinationMarker = null;
+
 directionsButton.addEventListener("click", () => {
   if (!navigator.geolocation) {
     directionsStatus.textContent =
@@ -1245,28 +1629,88 @@ directionsButton.addEventListener("click", () => {
         }
       });
 
-      if (window.hostelHubUserLocationMarker) {
-        window.hostelHubUserLocationMarker.remove();
+      // Keep only the latest pair of route markers. The hostel marker is
+      // replaced by the labelled destination marker while a route is shown.
+      if (routeStartMarker) {
+        routeStartMarker.remove();
+        routeStartMarker = null;
       }
+      if (routeDestinationMarker) {
+        routeDestinationMarker.remove();
+        routeDestinationMarker = null;
+      }
+      marker.remove();
 
-      window.hostelHubUserLocationMarker =
-        new maplibregl.Marker({ color: "#2563eb" })
-          .setLngLat([originLon, originLat])
-          .setPopup(
-            new maplibregl.Popup({ offset: 25 })
-              .setText("Your location")
-          )
-          .addTo(map);
+      const startIsWest = originLon <= longitude;
 
+      routeStartMarker = new maplibregl.Marker({
+        element: createRouteEndpointMarker(
+          "A · START",
+          "start",
+          startIsWest ? "left" : "right"
+        ),
+        anchor: "bottom"
+      })
+        .setLngLat([originLon, originLat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 30 })
+            .setText("A · Start · Your location")
+        )
+        .addTo(map);
+
+      routeDestinationMarker = new maplibregl.Marker({
+        element: createRouteEndpointMarker(
+          "B · DESTINATION",
+          "destination",
+          startIsWest ? "right" : "left"
+        ),
+        anchor: "bottom"
+      })
+        .setLngLat([longitude, latitude])
+        .setPopup(
+          new maplibregl.Popup({ offset: 30 })
+            .setText(hostel.name || "B · Destination")
+        )
+        .addTo(map);
+
+      // Include the route line and both endpoints in the viewport.
       const bounds = new maplibregl.LngLatBounds(
         [originLon, originLat],
         [originLon, originLat]
       );
-
+      bounds.extend([longitude, latitude]);
       route.geometry.coordinates.forEach(point => bounds.extend(point));
 
+      const isCompactMap = window.innerWidth <= 600;
+      const verticalPadding = isCompactMap ? 64 : 56;
+      const padding = {
+        top: verticalPadding,
+        bottom: verticalPadding,
+        left: 64,
+        right: 64
+      };
+
+      if (!isCompactMap) {
+        // Side-mounted labels need extra room at the route edges.
+        const startLabelWidth =
+          routeStartMarker
+            .getElement()
+            .querySelector(".route-endpoint-label")
+            ?.getBoundingClientRect().width || 80;
+        const destinationLabelWidth =
+          routeDestinationMarker
+            .getElement()
+            .querySelector(".route-endpoint-label")
+            ?.getBoundingClientRect().width || 120;
+        const startOverhang = Math.ceil(startLabelWidth) + 16;
+        const destinationOverhang = Math.ceil(destinationLabelWidth) + 16;
+
+        padding.left = (startIsWest ? startOverhang : destinationOverhang) + 8;
+        padding.right = (startIsWest ? destinationOverhang : startOverhang) + 8;
+      }
+
       map.fitBounds(bounds, {
-        padding: 55,
+        padding,
         maxZoom: 15,
         duration: 700
       });
@@ -1303,8 +1747,8 @@ window.hostelHubDetailMap = map;
 function getOwnerPhoneForHostel(hostelId) {
   const h = findHostel(hostelId);
   if (!h) return "";
-  const owner = findUser(h.ownerId);
-  const phone = h.ownerPhone || (owner ? owner.phone : "");
+  const owner = findUser(h.ownerId) || { phone: "" };
+  const phone = h.ownerPhone || owner.phone || "";
   return String(phone || "").replace(/\D/g, "");
 }
 
@@ -1559,8 +2003,8 @@ function ownerInquiriesHTML(ownerId) {
     return `<div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No inquiries yet</div><div>Student messages about your listings will show up here.</div></div>`;
   }
   const rows = list.map(i => {
-    const student = findUser(i.studentId);
-    const h = findHostel(i.hostelId);
+    const student = findUser(i.studentId) || { name: "Deleted student", email: "" };
+    const h = findHostel(i.hostelId) || { name: "Listing removed" };
     return `
       <tr>
         <td><div class="cell-title">${esc(student.name)}</div><div class="cell-sub">${esc(student.email)}</div></td>
@@ -1572,7 +2016,7 @@ function ownerInquiriesHTML(ownerId) {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Student</th><th>Hostel</th><th>Message</th><th>Received</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1711,7 +2155,7 @@ function openListingModal(id) {
     </label>`).join("");
 
   const previewHTML = state.listingImageData
-    ? `<img src="${state.listingImageData}" alt="Preview" /><div>Click to change image</div>`
+    ? `<img src="${esc(state.listingImageData)}" alt="Preview" /><div>Click to change image</div>`
     : `<span class="dz-icon">☁️⬆️</span><div>Click to upload image<br>or paste an image URL below</div>`;
 
   openModal(`
@@ -1721,23 +2165,23 @@ function openListingModal(id) {
     </div>
     <div class="form-grid-2">
       <div class="field-group">
-        <label>Property Name *</label>
+        <label for="listingName">Property Name *</label>
         <input type="text" id="listingName" placeholder="e.g. Royal Boys PG" value="${editing ? esc(editing.name) : ""}" />
       </div>
       <div class="field-group">
-        <label>Property Type *</label>
+        <label for="listingType">Property Type *</label>
         <select id="listingType">${typeOptions}</select>
       </div>
       <div class="field-group">
-        <label>Nearest College *</label>
+        <label for="listingCollege">Nearest College *</label>
         <select id="listingCollege">${collegeOptions}</select>
       </div>
       <div class="field-group">
-        <label>Distance from college (km) *</label>
+        <label for="listingDistance">Distance from college (km) *</label>
         <input type="number" id="listingDistance" min="0" step="0.1" value="${editing ? editing.distance : "0.5"}" />
       </div>
       <div class="field-group">
-  <label>Location / Area *</label>
+  <label for="listingLocation">Location / Area *</label>
   <input
     type="text"
     id="listingLocation"
@@ -1747,7 +2191,7 @@ function openListingModal(id) {
 </div>
 
 <div class="field-group listing-map-group">
-  <label>Property Location on Map</label>
+  <label for="listingMapSearch">Property Location on Map</label>
 
   <div class="map-search-row">
     <input
@@ -1773,16 +2217,16 @@ function openListingModal(id) {
   <input type="hidden" id="listingLongitude" value="${editing && editing.longitude != null ? editing.longitude : ""}" />
 </div>
       <div class="field-group">
-        <label>Monthly Rent (₹) *</label>
+        <label for="listingRent">Monthly Rent (₹) *</label>
         <input type="number" id="listingRent" min="0" placeholder="8000" value="${editing ? editing.rent : ""}" />
       </div>
       <div class="field-group">
-        <label>Total Rooms</label>
+        <label for="listingRooms">Total Rooms</label>
         <input type="number" id="listingRooms" min="1" value="${editing ? editing.rooms : 10}" />
       </div>
     </div>
     <div class="field-group">
-      <label>Description</label>
+      <label for="listingDescription">Description</label>
       <textarea id="listingDescription" placeholder="Describe your property, nearby landmarks, rules, etc.">${editing ? esc(editing.description) : ""}</textarea>
     </div>
     <div class="field-group">
@@ -1790,9 +2234,11 @@ function openListingModal(id) {
       <div class="amenity-grid">${amenityBoxes}</div>
     </div>
     <div class="field-group">
-      <label>Property Image</label>
-      <div class="dropzone" id="listingDropzone" data-action="upload-image-trigger">${previewHTML}</div>
+      <label for="listingImageUrl">Property Image</label>
+      <div class="dropzone" id="listingDropzone" data-action="upload-image-trigger" role="button" tabindex="0"
+        aria-label="Upload a property image" aria-describedby="listingImageHint">${previewHTML}</div>
       <input type="text" id="listingImageUrl" placeholder="Or paste image URL here…" style="margin-top:8px;" value="${editing && editing.image && editing.image.startsWith('http') ? editing.image : ''}" />
+      <span id="listingImageHint" class="field-hint">Upload a photo or paste a direct image URL.</span>
     </div>
     <div class="modal-actions">
       <button class="btn" data-action="close-modal">Cancel</button>
@@ -1809,7 +2255,7 @@ function handleImageUpload(file) {
   reader.onload = (e) => {
     state.listingImageData = e.target.result;
     const dz = $("#listingDropzone");
-    if (dz) dz.innerHTML = `<img src="${state.listingImageData}" alt="Preview" /><div>Click to change image</div>`;
+    if (dz) dz.innerHTML = `<img src="${esc(state.listingImageData)}" alt="Preview" /><div>Click to change image</div>`;
   };
   reader.readAsDataURL(file);
 }
@@ -1922,7 +2368,7 @@ function adminApprovalHTML(pending) {
     return `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div>There are no listings waiting for approval.</div></div>`;
   }
   const rows = pending.map(h => {
-    const owner = findUser(h.ownerId);
+    const owner = findUser(h.ownerId) || { name: "Unknown owner", phone: "" };
     return `
       <tr>
         <td>
@@ -1943,7 +2389,7 @@ function adminApprovalHTML(pending) {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Property</th><th>Owner Details</th><th>Type &amp; Price</th><th>Submitted</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1956,7 +2402,7 @@ function adminPropertiesHTML() {
     return `<div class="empty-state"><div class="empty-icon">🏘️</div><div class="empty-title">No properties on the platform</div></div>`;
   }
   const rows = state.hostels.slice().sort((a, b) => b.views - a.views).map(h => {
-    const owner = findUser(h.ownerId);
+    const owner = findUser(h.ownerId) || { name: "Unknown owner" };
     const inqCount = state.inquiries.filter(i => i.hostelId === h.id).length;
     return `
       <tr>
@@ -1974,7 +2420,7 @@ function adminPropertiesHTML() {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>Property</th><th>Owner</th><th>Status</th><th>Views</th><th>Inquiries</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -2003,7 +2449,7 @@ function adminUsersHTML() {
       </tr>`;
   }).join("");
   return `
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Data table">
       <table>
         <thead><tr><th>User</th><th>Role</th><th>Joined</th><th>Activity</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -2028,7 +2474,7 @@ function adminReportsHTML() {
     const pct = Math.round((count / totalHostels) * 100);
     return `
       <div class="progress-row">
-        <div class="progress-row-top"><span>${label}</span><span>${pct}%</span></div>
+        <div class="progress-row-top"><span>${esc(label)}</span><span>${pct}%</span></div>
         <div class="progress-track"><div class="progress-fill" data-final-width="${pct}%"></div></div>
       </div>`;
   }).join("");
@@ -2155,6 +2601,80 @@ async function exportData() {
   showToast("Platform data exported.", "success");
 }
 
+function askAdminPassword() {
+  return new Promise(resolve => {
+    let settled = false;
+    let overlayListener = null;
+    const overlay = $("#modalOverlay");
+
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      if (overlayListener) overlay.removeEventListener("click", overlayListener);
+      document.removeEventListener("keydown", onKeydown, true);
+      closeModal();
+      resolve(value);
+    };
+
+    const onKeydown = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finish(null);
+      }
+    };
+
+    openModal(`
+      <div class="modal-header">
+        <h2 class="modal-title">Confirm administrator password</h2>
+        <button class="modal-close" type="button" data-action="close-modal" aria-label="Cancel">✕</button>
+      </div>
+      <form id="adminResetAuthForm" class="modal-form">
+        <p class="modal-copy">Re-enter your administrator password to permanently clear platform data.</p>
+        <div class="field-group">
+          <label for="adminResetPassword">Administrator password</label>
+          <input type="password" id="adminResetPassword" autocomplete="current-password" required />
+        </div>
+        <div id="adminResetError" class="form-error" role="alert" hidden></div>
+        <div class="modal-actions">
+          <button class="btn" type="button" data-action="close-modal">Cancel</button>
+          <button class="btn btn-outline-red" type="submit">Clear platform data</button>
+        </div>
+      </form>
+    `);
+
+    const form = $("#adminResetAuthForm");
+    const input = $("#adminResetPassword");
+    const errorEl = $("#adminResetError");
+    const cancel = form?.querySelector('[data-action="close-modal"]');
+
+    form?.addEventListener("submit", event => {
+      event.preventDefault();
+      const password = input ? input.value : "";
+      if (!password) {
+        if (errorEl) {
+          errorEl.textContent = "Enter your administrator password.";
+          errorEl.hidden = false;
+        }
+        input?.focus();
+        return;
+      }
+      finish(password);
+    });
+    cancel?.addEventListener("click", event => {
+      event.preventDefault();
+      finish(null);
+    });
+    overlayListener = event => {
+      if (event.target === overlay) finish(null);
+    };
+    overlay.addEventListener("click", overlayListener);
+    document.addEventListener("keydown", onKeydown, true);
+
+    window.setTimeout(() => input?.focus(), 0);
+  });
+}
+
 async function resetData() {
   const confirmed = confirm(
     "CLEAR ALL PLATFORM DATA?\n\n" +
@@ -2166,10 +2686,13 @@ async function resetData() {
 
   if (!confirmed) return;
 
+  const password = await askAdminPassword();
+  if (password === null) return;
+
   let data;
 
   try {
-    data = await api("/reset", { method: "POST" });
+    data = await api("/reset", { method: "POST", body: { password } });
   } catch (err) {
     showToast(err.message, "error");
     return;
@@ -2296,13 +2819,13 @@ async function loadHostelReviews(hostelId) {
       return;
     }
     container.innerHTML = reviews.map(r => `
-      <div class="review-card" style="padding:10px 12px; margin-top:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-          <span style="font-weight:600; font-size:13px;">${esc(r.studentName)}</span>
-          <span style="color:#f59e0b; font-size:12px;">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
+      <div class="review-card review-card-detail">
+        <div class="review-card-head">
+          <span class="review-card-name">${esc(r.studentName)}</span>
+          <span class="review-card-stars" aria-label="${r.rating} out of 5 stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
         </div>
-        <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5;">${esc(r.comment)}</div>
-        <div style="font-size:11px; color:var(--text-faint); margin-top:4px;">${r.date}</div>
+        <div class="review-card-body">${esc(r.comment)}</div>
+        <div class="review-card-date">${esc(r.date)}</div>
       </div>
     `).join("");
   } catch (err) {
@@ -2440,7 +2963,29 @@ document.addEventListener("keydown", (e) => {
     if (document.activeElement && document.activeElement.id === "signupConfirm") handleSignup();
     if (document.activeElement && document.activeElement.id === "hostelSearchInput") runSearch();
   }
-  if (e.key === "Escape" && !$("#modalOverlay").hidden) closeModal();
+
+  const overlay = $("#modalOverlay");
+  if (overlay && !overlay.hidden && e.key === "Tab") {
+    const focusable = modalFocusableElements();
+    const modal = $("#modalBody");
+    if (!focusable.length) {
+      e.preventDefault();
+      modal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || !modal.contains(active))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (active === last || !modal.contains(active))) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  if (e.key === "Escape" && overlay && !overlay.hidden) closeModal();
 });
 
 $("#modalOverlay").addEventListener("click", (e) => {
@@ -2488,16 +3033,119 @@ function initFooter() {
   });
 }
 
+/* ---------------------- Cinematic intro ---------------------- */
+
+function initCinematicIntro() {
+  const boot = document.getElementById("hhBoot");
+  if (!boot) return;
+
+  // Mirrors the CSS opener timeline: stage exit starts at 3s, the curtain
+  // clears at 4.65s, and the overlay is removed just after it.
+  const INTRO_REVEAL_AT = 3000;
+  const INTRO_FINISH_AT = 4700;
+  const INTRO_SKIP_MS = 580;
+
+  const skip = document.getElementById("hhBootSkip");
+  const root = document.documentElement;
+  const reduceMotion = window.matchMedia
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const finishImmediately = () => {
+    root.classList.add("hh-intro-skipped");
+    boot.hidden = true;
+    boot.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("hh-intro-exiting");
+  };
+
+  if (reduceMotion || root.classList.contains("hh-intro-skipped")) {
+    finishImmediately();
+    return;
+  }
+
+  // Remember that the opener has played so a refresh in this tab goes
+  // straight to the site. Append ?intro=1 to force a replay.
+  try { sessionStorage.setItem("hostelhub_intro_seen", "1"); } catch (_) {}
+
+  let finished = false;
+  let skipping = false;
+  let bodyRevealTimer = 0;
+  let revealTimer = 0;
+  let finishTimer = 0;
+
+  const revealSite = () => {
+    document.body.classList.add("hh-intro-exiting");
+    window.clearTimeout(bodyRevealTimer);
+    bodyRevealTimer = window.setTimeout(() => {
+      document.body.classList.remove("hh-intro-exiting");
+    }, 1550);
+  };
+
+  const finishIntro = () => {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(finishTimer);
+    if (skip && document.activeElement === skip) skip.blur();
+    boot.hidden = true;
+    boot.setAttribute("aria-hidden", "true");
+    document.removeEventListener("keydown", onIntroKeydown);
+  };
+
+  const skipIntro = () => {
+    if (finished || skipping) return;
+    skipping = true;
+    window.clearTimeout(revealTimer);
+    window.clearTimeout(finishTimer);
+    boot.classList.add("is-skipping");
+    revealSite();
+    finishTimer = window.setTimeout(finishIntro, INTRO_SKIP_MS);
+  };
+
+  const onIntroKeydown = (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    skipIntro();
+  };
+
+  // Align the JS hand-off with the CSS timeline. On a very slow startup the
+  // opener may already be part-way through (or finished) by the time this
+  // runs; in that case don't queue a second, late reveal.
+  const introElapsed = () => {
+    if (!boot.getAnimations) return 0;
+    const animations = boot.getAnimations();
+    const rootAnim = animations.find((anim) => anim.animationName === "hhIntroRootHide");
+    if (rootAnim && rootAnim.currentTime != null) {
+      return Math.max(0, Number(rootAnim.currentTime));
+    }
+    const bg = boot.querySelector(".hh-boot-bg");
+    const bgAnim = bg && bg.getAnimations ? bg.getAnimations()[0] : null;
+    if (bgAnim && bgAnim.currentTime != null) {
+      return Math.max(0, Number(bgAnim.currentTime));
+    }
+    return 0;
+  };
+
+  const elapsed = introElapsed();
+  if (elapsed >= INTRO_FINISH_AT) {
+    revealSite();
+    boot.hidden = true;
+    boot.setAttribute("aria-hidden", "true");
+    return;
+  }
+  if (elapsed >= INTRO_REVEAL_AT) revealSite();
+  else revealTimer = window.setTimeout(revealSite, INTRO_REVEAL_AT - elapsed);
+  finishTimer = window.setTimeout(finishIntro, INTRO_FINISH_AT - elapsed);
+
+  if (skip) skip.addEventListener("click", skipIntro);
+  document.addEventListener("keydown", onIntroKeydown);
+}
+
 /* ---------------------- Init ---------------------- */
 
 async function init() {
   try {
     const footerYr = document.getElementById("footerYear");
     if (footerYr) footerYr.textContent = new Date().getFullYear();
-    if (localStorage.getItem("hostelhub_theme") === "light") {
-      document.body.classList.add("light-theme");
-      $all('[data-action="toggle-theme"]').forEach(btn => { btn.textContent = "🌙"; });
-    }
+    syncThemeUI();
   } catch (_) {}
   try {
     const meta = await api("/meta");
@@ -2516,10 +3164,16 @@ async function init() {
   } catch (err) {
     // api() already showed a toast for network/backend failures.
   }
+  // If the visitor already opened the auth screen (or entered the app) while
+  // the startup requests were in flight, keep their screen and refresh it
+  // with the data that has just arrived.
+  if (state.screen === "auth") return;
+  if (state.screen === "app") { enterApp(); return; }
   showLandingScreen();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initCinematicIntro();
   init();
   initFooter();
   initLandingScrollReveal();
