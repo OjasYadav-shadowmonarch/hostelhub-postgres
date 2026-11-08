@@ -44,6 +44,7 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 
 def env_bool(name, default=False):
+    """Read a boolean environment setting, using default when it is absent."""
     val = os.environ.get(name)
     if val is None:
         return default
@@ -51,6 +52,7 @@ def env_bool(name, default=False):
 
 
 def env_int(name, default, minimum=None, maximum=None):
+    """Read an integer setting, falling back on invalid input and clamping bounds."""
     try:
         value = int(os.environ.get(name, default))
     except (TypeError, ValueError):
@@ -117,6 +119,7 @@ def client_ip():
 
 
 def rate_limited(bucket, limit, window_seconds, key=None):
+    """Record a hit in a shared fixed window and return whether it exceeds limit."""
     now = time.time()
     window_start = int(now // window_seconds) * window_seconds
     bucket_key = str(key or client_ip())
@@ -146,6 +149,7 @@ def rate_limited(bucket, limit, window_seconds, key=None):
 
 
 def same_origin(value):
+    """Return whether a URL has the same case-insensitive netloc as the request host."""
     if not value:
         return False
     try:
@@ -188,6 +192,7 @@ def protect_state_changing_requests():
 
 
 def get_or_create_csrf_token():
+    """Reuse the request or cookie CSRF token, generating one when absent."""
     token = getattr(g, "csrf_token", None)
     if token:
         return token
@@ -198,6 +203,7 @@ def get_or_create_csrf_token():
 
 @app.after_request
 def add_security_headers(response):
+    """Apply response security headers and issue a CSRF cookie when needed."""
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -246,6 +252,7 @@ def add_security_headers(response):
 
 @app.errorhandler(413)
 def request_too_large(_exc):
+    """Return a JSON size error for API requests and plain text otherwise."""
     if request.path.startswith("/api/"):
         return error("That upload is too large.", 413)
     return "Request entity too large", 413
@@ -253,6 +260,7 @@ def request_too_large(_exc):
 
 @app.errorhandler(404)
 def not_found(exc):
+    """Return a JSON 404 for API requests or the original HTTP error response."""
     if request.path.startswith("/api/"):
         return error("Not found.", 404)
     return exc.get_response()
@@ -542,6 +550,7 @@ def create_schema(db):
 
 
 def insert_demo_data(db):
+    """Insert demo records, requiring configured passwords before creating accounts."""
     if not (DEMO_PASSWORD and ADMIN_USERNAME and ADMIN_PASSWORD):
         raise RuntimeError(
             "DEMO_PASSWORD, ADMIN_USERNAME and ADMIN_PASSWORD must all be set "
@@ -665,6 +674,7 @@ def init_db():
 # ---------------------------------------------------------------- #
 
 def user_public(row, include_contact=True):
+    """Serialize a user without credentials, optionally blanking contact details."""
     data = {
         "id": row["id"], "name": row["name"], "username": row["username"],
         "email": row["email"], "phone": row["phone"], "role": row["role"],
@@ -718,6 +728,7 @@ class ValidationError(ValueError):
 
 
 def clean_image_value(value):
+    """Normalize an optional image value or raise ValidationError for invalid input."""
     if value in (None, ""):
         return None
     if not isinstance(value, str):
@@ -739,6 +750,7 @@ def listing_payload(data, existing=None):
     existing = existing or {}
 
     def text_value(key, fallback, limit, label):
+        """Read and trim a text field, rejecting values longer than its limit."""
         raw = data.get(key, fallback)
         if raw is None:
             raw = fallback
@@ -748,6 +760,7 @@ def listing_payload(data, existing=None):
         return raw
 
     def number_value(key, fallback, label, cast, minimum, maximum):
+        """Parse a numeric field and raise ValidationError if invalid or out of bounds."""
         raw = data.get(key, fallback)
         if raw in (None, ""):
             raw = fallback
@@ -838,6 +851,7 @@ def listing_payload(data, existing=None):
 # ---------------------------------------------------------------- #
 
 def current_user():
+    """Return the active user after validating session age and signature, or clear it."""
     uid = session.get("user_id")
     signature = session.get("auth_sig")
     issued_at = session.get("auth_at")
@@ -925,6 +939,7 @@ def static_files(filename):
 
 @app.post("/api/geocode")
 def api_geocode():
+    """Geocode an owner address with rate limiting and validate the returned coordinates."""
     user, err = require_role("owner")
     if err:
         return err
@@ -1140,6 +1155,7 @@ def api_state():
 @app.route("/history")
 def history():
 
+    """Render daily activity counts for administrators or an access guidance page."""
     user, err = require_role("admin")
     if err:
         status = err[1] if isinstance(err, tuple) and len(err) > 1 else 401
@@ -1362,6 +1378,7 @@ def api_me():
 @app.post("/api/auth/login")
 
 def api_login():
+    """Validate credentials and role, then start a session subject to rate limiting."""
     if rate_limited("login", 10, 300):
         return rate_limit_error(300)
 
@@ -1409,6 +1426,7 @@ def api_login():
 
 @app.post("/api/auth/signup")
 def api_signup():
+    """Validate and create a student or owner account, then start its session."""
     if rate_limited("signup", 5, 600):
         return rate_limit_error(600)
 
@@ -1514,6 +1532,7 @@ def api_logout():
 
 @app.put("/api/auth/profile")
 def api_update_profile():
+    """Validate and save the signed-in user's contact details."""
     user, err = require_login()
     if err:
         return err
@@ -1540,6 +1559,7 @@ def api_update_profile():
 
 @app.put("/api/auth/password")
 def api_update_password():
+    """Verify the current password, save its replacement and refresh the session."""
     user, err = require_login()
     if err:
         return err
@@ -1574,6 +1594,7 @@ def hostel_or_404(db, hostel_id):
 
 @app.post("/api/hostels")
 def api_create_hostel():
+    """Validate an owner listing and save it with pending approval status."""
     user, err = require_role("owner")
     if err:
         return err
@@ -1620,6 +1641,7 @@ def api_create_hostel():
 
 @app.put("/api/hostels/<int:hostel_id>")
 def api_update_hostel(hostel_id):
+    """Validate and update a listing after checking ownership or administrator access."""
     user, err = require_login()
     if err:
         return err
@@ -1734,6 +1756,7 @@ def api_reject_hostel(hostel_id):
 
 @app.post("/api/hostels/<int:hostel_id>/contact")
 def api_contact_owner(hostel_id):
+    """Create a student inquiry for a live verified listing and return owner details."""
     user = current_user()
     if not user:
         return error("Please log in to contact the hostel owner.", 401)
@@ -1838,6 +1861,7 @@ def api_export():
 
 @app.post("/api/reset")
 def api_reset():
+    """Clear platform data after configured administrator and password checks."""
     user, err = require_role("admin")
     if err:
         return err
@@ -1910,6 +1934,7 @@ def api_get_reviews(hostel_id):
 
 @app.post("/api/hostels/<int:hostel_id>/reviews")
 def api_add_review(hostel_id):
+    """Validate and upsert a student review for a live verified listing, updating its rating."""
     user, err = require_role("student")
     if err:
         return err
@@ -1959,6 +1984,7 @@ def api_get_wishlist():
 
 @app.post("/api/wishlist/<int:hostel_id>/toggle")
 def api_toggle_wishlist(hostel_id):
+    """Toggle a student wishlist entry, allowing additions only for live verified listings."""
     user, err = require_role("student")
     if err:
         return err

@@ -23,6 +23,7 @@ import app
 
 
 def main():
+    """Require reset consent and demo credentials, then seed the database with rollback on failure."""
     if "--reset" not in sys.argv[1:]:
         raise SystemExit(
             "This command replaces all application data. Re-run with --reset "
