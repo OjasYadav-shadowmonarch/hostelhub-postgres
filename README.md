@@ -157,6 +157,7 @@ hostelhub-postgres/
 │
 ├── schema.sql
 ├── database.sql
+├── seed_demo.py
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
@@ -175,7 +176,10 @@ hostelhub-postgres/
     └── pro/
         ├── upgrade.css
         ├── upgrade.js
-        └── history.css
+        ├── light-refinement.css
+        ├── theme-boot.js
+        ├── history.css
+        └── history-redirect.css
 ```
 
 *Note: The structure above highlights the main project files. Other files and assets may exist in the repository.*
@@ -188,7 +192,8 @@ hostelhub-postgres/
 | `style.css` | Base layout, styling, themes, animations and responsive design |
 | `script.js` | Frontend functionality, intro timing, navigation, rendering and API communication |
 | `schema.sql` | PostgreSQL schema and table definitions |
-| `database.sql` | SQL setup and database initialization resources |
+| `database.sql` | Schema-only compatibility file; contains no accounts or demo data |
+| `seed_demo.py` | Optional, destructive local demo-data loader guarded by environment credentials |
 | `requirements.txt` | Python package dependencies |
 | `.env.example` | Template for local environment configuration |
 | `.gitignore` | Excludes sensitive and unnecessary files from version control |
@@ -201,6 +206,7 @@ hostelhub-postgres/
 | `static/pro/light-refinement.css` | Isolated light-theme refinements, focus states and touch-target rules |
 | `static/pro/theme-boot.js` | Pre-paint theme restoration, intro bootstrapping and browser chrome colour sync |
 | `static/pro/history.css` | Styling for the `/history` summary page |
+| `static/pro/history-redirect.css` | Styling for the legacy `history.html` redirect page |
 | `static/` | Static resources such as icons, images, effect styles and page-specific assets |
 
 ---
@@ -295,7 +301,20 @@ The following milestones document the project's development in chronological ord
 - Added a fail-closed `SECRET_KEY` requirement, administrator password re-confirmation for data reset, and a guard against demo data being seeded with blank passwords.
 - Re-verified MapLibre route markers, responsive layouts and both themes with automated browser checks.
 
-**Current documented milestone:** `1.6.0 - Light Theme and Security Refinement`
+### Version 1.6.1 — Shared Security Hardening
+
+**Focus:** Closing deployment-level security and verification gaps.
+
+- Replaced per-process rate limiting with a PostgreSQL-backed fixed-window limiter shared by every application worker.
+- Added double-submit CSRF tokens (`hostelhub_csrf` cookie plus `X-CSRF-Token` header) on top of the existing origin checks.
+- Added an explicit `/api/csrf` bootstrap endpoint and automatic token handling in the frontend API helper.
+- Added optional trusted-proxy support through `TRUST_PROXY`, including forwarded protocol handling for secure requests and HSTS.
+- Removed all demo accounts and published credentials from `database.sql`; it is now a schema-only compatibility file.
+- Added `seed_demo.py` for optional local demo data. It requires `DEMO_PASSWORD`, `ADMIN_USERNAME` and `ADMIN_PASSWORD`, and refuses to run without `--reset`.
+- Moved the legacy redirect page's inline styles into a static stylesheet and made the CSP's stylesheet source explicit.
+- Re-ran backend security tests, syntax checks, browser checks and map-marker checks.
+
+**Current documented milestone:** `1.6.1 - Shared Security Hardening`
 
 The version history describes development milestones rather than verified release tags. Update this section whenever a new feature or significant fix is merged into the stable branch.
 
@@ -375,7 +394,7 @@ At minimum, set the PostgreSQL connection details and a random `SECRET_KEY` of 3
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Set `SESSION_COOKIE_SECURE=1` when the app is served over HTTPS. Leave `FLASK_DEBUG=0` outside local development. Administrator provisioning is optional; when both `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set, the first boot creates that administrator without overwriting an existing account.
+Set `SESSION_COOKIE_SECURE=1` when the app is served over HTTPS. Leave `FLASK_DEBUG=0` outside local development. If HTTPS terminates at a trusted reverse proxy, set `TRUST_PROXY=1` so forwarded client IPs and protocols are honoured; leave it off when clients connect directly. Administrator provisioning is optional; when both `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set, the first boot creates that administrator without overwriting an existing account.
 
 ### 5. Initialize PostgreSQL
 
@@ -393,7 +412,20 @@ psql -U postgres -d roomfinder -f schema.sql
 
 Use the actual database name and PostgreSQL username configured on your machine.
 
-**Important:** Inspect the SQL files before executing them against an existing database. Do not run destructive SQL operations on production data. Use `schema.sql` for production. `database.sql` contains demo accounts with published demo credentials and must only be used for local demonstrations.
+**Important:** Inspect the SQL files before executing them against an existing database. Do not run destructive SQL operations on production data. Use `schema.sql` for production. `database.sql` is retained as a schema-only compatibility file and contains no accounts or published credentials.
+
+#### Optional local demo data
+
+The repository does not ship demo accounts or plaintext demo passwords. To create a local demonstration dataset, set the required environment variables and run the guarded seeder:
+
+```powershell
+$env:DEMO_PASSWORD = "choose-a-local-password"
+$env:ADMIN_USERNAME = "admin"
+$env:ADMIN_PASSWORD = "choose-a-local-admin-password"
+python seed_demo.py --reset
+```
+
+`seed_demo.py` is destructive: it drops and recreates the application tables before inserting demo records. Run it only against a local or disposable database. Never configure demo credentials in production.
 
 ### 6. Start the application
 
@@ -485,10 +517,9 @@ Configure the required production environment variables in the Render dashboard.
 | `FLASK_DEBUG` | Keep disabled in production |
 | `SESSION_LIFETIME_HOURS` | Absolute session lifetime, default `12` (range `1`-`168`) |
 | `SESSION_COOKIE_SECURE` | Set to `1` when the site is served over HTTPS |
-| `TRUST_PROXY` | Set to `1` only behind a trusted reverse proxy that supplies `X-Forwarded-For` |
+| `TRUST_PROXY` | Set to `1` only behind one trusted reverse proxy that supplies `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` |
 | `ADMIN_USERNAME` | Optional configured administrator username |
 | `ADMIN_PASSWORD` | Optional configured administrator password |
-| `DEMO_PASSWORD` | Optional demo-data helper only. Never set in production |
 
 The actual variables required depend on the backend configuration and deployment settings.
 
@@ -546,13 +577,13 @@ If Render is configured for automatic deployment from `main`, merging a commit m
 - `SECRET_KEY` is mandatory and must be at least 32 characters; the app refuses to start with a missing or weak key.
 - Session cookies are `HttpOnly`, `SameSite=Lax`, named `hostelhub_session`, and configurable as `Secure` for HTTPS deployments. Absolute lifetime defaults to 12 hours.
 - Session claims are signed against the user id, password hash, role and account status. Password changes and deactivations invalidate existing sessions.
-- State-changing `/api/` requests require a same-origin `Origin`/`Referer`/`Sec-Fetch-Site` context. Cross-site form posts are rejected.
-- Security headers include CSP, frame denial, `nosniff`, referrer policy, permissions policy and HSTS when the request is secure.
-- Sensitive endpoints have in-process rate limits. JSON `404`/`413` responses replace HTML error pages, and request bodies are capped at 5 MB.
+- State-changing `/api/` requests require a same-origin `Origin`/`Referer`/`Sec-Fetch-Site` context. They also require a double-submit CSRF token: the readable `hostelhub_csrf` cookie must match the `X-CSRF-Token` header. The frontend obtains tokens automatically.
+- Security headers include CSP, frame denial, `nosniff`, referrer policy, permissions policy and HSTS when the request is secure. The CSP allows only external stylesheets and explicitly permits the existing inline `style` attributes.
+- Sensitive endpoints use a PostgreSQL-backed fixed-window rate limiter, so limits are shared across workers instead of being per process. JSON `404`/`413` responses replace HTML error pages, and request bodies are capped at 5 MB.
 - `/api/state` is role-scoped. Guests and students do not receive owner contact details or unrelated inquiries.
 - Listing, inquiry, review, contact, wishlist and geocode inputs are validated and bounds-checked.
 - Administrator data reset requires the current administrator password and keeps the signed-in administrator account.
-- Demo-data seeding refuses to run without `DEMO_PASSWORD`, `ADMIN_USERNAME` and `ADMIN_PASSWORD`, so it cannot create accounts with blank passwords.
+- Demo data is no longer included in any SQL file. The optional `seed_demo.py` helper requires `DEMO_PASSWORD`, `ADMIN_USERNAME` and `ADMIN_PASSWORD`, and refuses to run without `--reset`.
 - Password minimum length is 8 characters in both the frontend and backend.
 
 ### Deployment checklist
@@ -563,18 +594,17 @@ If Render is configured for automatic deployment from `main`, merging a commit m
 - Configure administrator credentials through the deployment environment.
 - Never commit database passwords, API secrets or private credentials.
 - Use HTTPS and set `SESSION_COOKIE_SECURE=1`.
+- Set `TRUST_PROXY=1` only when a trusted reverse proxy supplies forwarded headers.
 - Back up production data before performing database changes.
 - Test authentication and role-based permissions after backend updates.
-- Do not load `database.sql` into production. Its demo accounts have published demo credentials.
+- Do not run `seed_demo.py` against production; it destroys and recreates application tables.
 
 ### Known limitations
 
-- Rate limiting is in-process and therefore per worker. A multi-worker deployment should add a shared limiter such as Redis or a reverse-proxy rate limit.
-- CSRF protection is based on origin checks rather than per-session tokens. It blocks normal cross-site form posts but is not a substitute for token-based CSRF protection in every architecture.
-- CSP still permits inline styles because the existing interface uses inline `style` attributes. Inline scripts are not allowed.
-- `SESSION_COOKIE_SECURE` depends on deployment configuration. HSTS is emitted only when Flask sees a secure request; a reverse proxy must preserve the forwarded protocol.
-- Demo credentials remain in `database.sql` for local demonstration only. Rotate or remove them before any public deployment.
-- Browser checks covered this repository's demo dataset. Real-device testing, assistive-technology testing and load testing were not performed.
+- The CSP allows inline `style` attributes because the existing interface uses them for chart sizes, progress bars and map layout. Inline scripts are not allowed, and external stylesheet sources are explicitly restricted. A future refactor could replace these attributes with classes or CSS custom properties and remove the inline-style allowance.
+- `SESSION_COOKIE_SECURE` depends on deployment configuration. HSTS is emitted only when Flask sees a secure request; set `TRUST_PROXY=1` when TLS terminates at a trusted proxy.
+- Browser checks covered this repository's demo dataset. Real-device testing, assistive-technology testing and production-scale load testing remain manual or external.
+- Shared rate limiting requires the `rate_limit_windows` table, which the application creates automatically from the schema.
 
 ---
 

@@ -22,9 +22,8 @@ import hashlib
 import hmac
 import os
 import re
-import threading
+import secrets
 import time
-from collections import deque
 from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
 
@@ -34,6 +33,7 @@ import psycopg2.extras
 from dotenv import load_dotenv
 from flask import Flask, abort, g, jsonify, request, session, send_from_directory
 from psycopg2 import errors as pg_errors
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -84,6 +84,9 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,40}$")
 
 SESSION_LIFETIME_HOURS = env_int("SESSION_LIFETIME_HOURS", 12, 1, 168)
 SESSION_LIFETIME_SECONDS = SESSION_LIFETIME_HOURS * 60 * 60
+TRUST_PROXY = env_bool("TRUST_PROXY", False)
+CSRF_COOKIE_NAME = "hostelhub_csrf"
+CSRF_HEADER_NAME = "X-CSRF-Token"
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = SECRET_KEY
@@ -96,35 +99,50 @@ app.config.update(
     MAX_CONTENT_LENGTH=5 * 1024 * 1024,
 )
 
-# In-process, per-worker rate limiting. It is deliberately dependency-free;
-# deployments with multiple workers still get useful protection per process.
-_rate_lock = threading.Lock()
-_rate_events = {}
+if TRUST_PROXY:
+    # Trust one proxy hop. It supplies the client IP, protocol and host used
+    # for rate limiting, secure-request detection and HSTS.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Rate limiting is stored in PostgreSQL so it is shared by every worker.
+# A fixed window is sufficient here: these are abuse controls, not billing.
+_last_rate_cleanup = 0.0
+RATE_LIMIT_RETENTION_SECONDS = 24 * 60 * 60
+RATE_LIMIT_CLEANUP_INTERVAL = 60 * 60
 
 
 def client_ip():
-    """Return the caller's address, honouring a trusted reverse proxy only."""
-    if env_bool("TRUST_PROXY", False):
-        forwarded = request.headers.get("X-Forwarded-For", "")
-        if forwarded:
-            return forwarded.split(",", 1)[0].strip()
+    """Return the caller's address after the optional trusted-proxy fix."""
     return request.remote_addr or "unknown"
 
 
 def rate_limited(bucket, limit, window_seconds, key=None):
-    now = time.monotonic()
-    bucket_key = (bucket, key or client_ip())
-    with _rate_lock:
-        events = _rate_events.setdefault(bucket_key, deque())
-        while events and now - events[0] >= window_seconds:
-            events.popleft()
-        if len(events) >= limit:
-            return True
-        events.append(now)
-        if len(_rate_events) > 5000:
-            for old_key in [k for k, q in _rate_events.items() if not q]:
-                _rate_events.pop(old_key, None)
-    return False
+    now = time.time()
+    window_start = int(now // window_seconds) * window_seconds
+    bucket_key = str(key or client_ip())
+    db = get_db()
+    row = db.execute(
+        "INSERT INTO rate_limit_windows (bucket, key, window_start, hits) "
+        "VALUES (%s, %s, to_timestamp(%s), 1) "
+        "ON CONFLICT (bucket, key) DO UPDATE SET "
+        "hits = CASE WHEN rate_limit_windows.window_start = EXCLUDED.window_start "
+        "THEN rate_limit_windows.hits + 1 ELSE 1 END, "
+        "window_start = EXCLUDED.window_start "
+        "RETURNING hits",
+        (bucket, bucket_key, window_start),
+    ).fetchone()
+    db.commit()
+
+    global _last_rate_cleanup
+    if now - _last_rate_cleanup >= RATE_LIMIT_CLEANUP_INTERVAL:
+        _last_rate_cleanup = now
+        db.execute(
+            "DELETE FROM rate_limit_windows WHERE window_start < to_timestamp(%s)",
+            (now - RATE_LIMIT_RETENTION_SECONDS,),
+        )
+        db.commit()
+
+    return bool(row and row["hits"] > limit)
 
 
 def same_origin(value):
@@ -138,7 +156,7 @@ def same_origin(value):
 
 @app.before_request
 def protect_state_changing_requests():
-    """Reject obvious cross-site API writes (CSRF defence in depth)."""
+    """Reject cross-site API writes and require a double-submit CSRF token."""
     if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
         return None
     if not request.path.startswith("/api/"):
@@ -156,7 +174,26 @@ def protect_state_changing_requests():
         and request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site"
     ):
         return error("Cross-site request blocked.", 403)
+
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get(CSRF_HEADER_NAME)
+    if (
+        not cookie_token
+        or not header_token
+        or not hmac.compare_digest(cookie_token, header_token)
+    ):
+        return error("Security token missing or invalid. Refresh and try again.", 403)
+
     return None
+
+
+def get_or_create_csrf_token():
+    token = getattr(g, "csrf_token", None)
+    if token:
+        return token
+    token = request.cookies.get(CSRF_COOKIE_NAME) or secrets.token_urlsafe(32)
+    g.csrf_token = token
+    return token
 
 
 @app.after_request
@@ -174,6 +211,8 @@ def add_security_headers(response):
         "frame-ancestors 'none'; form-action 'self'; "
         "script-src 'self' https://unpkg.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+        "style-src-elem 'self' https://fonts.googleapis.com https://unpkg.com; "
+        "style-src-attr 'unsafe-inline'; "
         "font-src 'self' data: https://fonts.gstatic.com; "
         "img-src 'self' data: blob: https:; "
         "connect-src 'self' https://router.project-osrm.org "
@@ -183,6 +222,24 @@ def add_security_headers(response):
     if request.is_secure:
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+
+    # Double-submit CSRF cookie. It is readable by the app's same-origin
+    # JavaScript, but not by other origins, and is separate from the signed
+    # session cookie.
+    if (
+        request.method in ("GET", "HEAD")
+        and not request.path.startswith("/static/")
+        and not request.cookies.get(CSRF_COOKIE_NAME)
+    ):
+        response.set_cookie(
+            CSRF_COOKIE_NAME,
+            get_or_create_csrf_token(),
+            max_age=SESSION_LIFETIME_SECONDS,
+            secure=app.config["SESSION_COOKIE_SECURE"],
+            httponly=False,
+            samesite="Lax",
+            path="/",
         )
     return response
 
@@ -404,6 +461,14 @@ CREATE TABLE IF NOT EXISTS wishlists (
     UNIQUE(student_id, hostel_id)
 );
 
+CREATE TABLE IF NOT EXISTS rate_limit_windows (
+    bucket TEXT NOT NULL,
+    key TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (bucket, key)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
 CREATE INDEX IF NOT EXISTS idx_hostels_owner     ON hostels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_hostels_college   ON hostels(college);
@@ -414,6 +479,7 @@ CREATE INDEX IF NOT EXISTS idx_reviews_hostel    ON reviews(hostel_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_student   ON reviews(student_id);
 CREATE INDEX IF NOT EXISTS idx_wishlists_student ON wishlists(student_id);
 CREATE INDEX IF NOT EXISTS idx_wishlists_hostel  ON wishlists(hostel_id);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_window ON rate_limit_windows(window_start);
 """
 
 # (id, name, username, email, phone, role, joined, status) -- password hash is added at insert time
@@ -502,6 +568,50 @@ def insert_demo_data(db):
     db.executescript(SYNC_SEQUENCES)
 
 
+def ensure_configured_admin(db, strict=False):
+    """Provision the environment-configured administrator if needed.
+
+    Existing accounts are never overwritten or silently promoted. In strict
+    mode (used after a destructive demo reset) a conflicting non-admin
+    username aborts the transaction instead of leaving no usable admin.
+    """
+    if not (ADMIN_USERNAME and ADMIN_PASSWORD):
+        return
+
+    existing_admin = db.execute(
+        "SELECT id, role FROM users WHERE lower(username)=lower(%s)",
+        (ADMIN_USERNAME,),
+    ).fetchone()
+
+    if existing_admin:
+        if existing_admin["role"] != "admin":
+            message = (
+                "Configured ADMIN_USERNAME matches a non-admin account; "
+                "refusing to promote it automatically."
+            )
+            if strict:
+                raise RuntimeError(message)
+            app.logger.warning(message)
+        return
+
+    db.execute(
+        """
+        INSERT INTO users
+            (name, username, email, phone, role,
+             joined, status, password_hash)
+        VALUES (%s, %s, %s, %s, 'admin', %s, 'active', %s)
+        """,
+        (
+            "HostelHub Administrator",
+            ADMIN_USERNAME,
+            None,
+            None,
+            date.today().isoformat(),
+            generate_password_hash(ADMIN_PASSWORD),
+        ),
+    )
+
+
 def seed(db):
     """Wipe everything and rebuild with the optional demo dataset.
 
@@ -509,13 +619,18 @@ def seed(db):
     signed-in administrator account. Callers must explicitly opt in.
     """
     db.executescript(
+        "DROP TABLE IF EXISTS reviews CASCADE; "
+        "DROP TABLE IF EXISTS wishlists CASCADE; "
         "DROP TABLE IF EXISTS inquiries CASCADE; "
+        "DROP TABLE IF EXISTS rate_limit_windows CASCADE; "
         "DROP TABLE IF EXISTS hostels CASCADE; "
         "DROP TABLE IF EXISTS users CASCADE;"
     )
     create_schema(db)
     insert_demo_data(db)
+    ensure_configured_admin(db, strict=True)
     db.commit()
+
 
 def init_db():
     """Create the schema and provision the configured administrator."""
@@ -533,40 +648,7 @@ def init_db():
 
     try:
         create_schema(db)
-
-        if ADMIN_USERNAME and ADMIN_PASSWORD:
-            existing_admin = db.execute(
-                "SELECT id, role FROM users WHERE lower(username)=lower(%s)",
-                (ADMIN_USERNAME,),
-            ).fetchone()
-
-            if existing_admin:
-                # Never overwrite an existing account's password or silently
-                # promote it during boot. The admin must change credentials
-                # through the authenticated password flow.
-                if existing_admin["role"] != "admin":
-                    app.logger.warning(
-                        "Configured ADMIN_USERNAME matches a non-admin account; "
-                        "refusing to promote it automatically."
-                    )
-            else:
-                db.execute(
-                    """
-                    INSERT INTO users
-                        (name, username, email, phone, role,
-                         joined, status, password_hash)
-                    VALUES (%s, %s, %s, %s, 'admin', %s, 'active', %s)
-                    """,
-                    (
-                        "HostelHub Administrator",
-                        ADMIN_USERNAME,
-                        None,
-                        None,
-                        date.today().isoformat(),
-                        generate_password_hash(ADMIN_PASSWORD),
-                    ),
-                )
-
+        ensure_configured_admin(db)
         db.commit()
 
     except Exception:
@@ -905,6 +987,13 @@ def api_geocode():
             "display_name": result.get("display_name", address),
         }
     )
+
+
+@app.get("/api/csrf")
+def api_csrf():
+    return jsonify({"token": get_or_create_csrf_token()})
+
+
 @app.get("/api/meta")
 def api_meta():
     return jsonify({"colleges": COLLEGES, "amenities": AMENITY_DEFS})

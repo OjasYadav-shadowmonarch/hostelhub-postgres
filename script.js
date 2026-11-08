@@ -9,13 +9,45 @@
 
 /* ---------------------- API helper ---------------------- */
 
+function readCookie(name) {
+  const prefix = name + "=";
+  return document.cookie
+    .split(";")
+    .map(part => part.trim())
+    .find(part => part.startsWith(prefix))
+    ?.slice(prefix.length) || "";
+}
+
+async function ensureCsrfToken() {
+  const existing = readCookie("hostelhub_csrf");
+  if (existing) return existing;
+
+  const res = await fetch("/api/csrf", { credentials: "same-origin", cache: "no-store" });
+  if (!res.ok) throw new Error("Could not obtain a security token.");
+  const data = await res.json().catch(() => ({}));
+  const token = data.token || readCookie("hostelhub_csrf");
+  if (!token) throw new Error("Could not obtain a security token.");
+  return token;
+}
+
 async function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
   const opts = {
-    method: options.method || "GET",
+    method,
     headers: { "Content-Type": "application/json" },
-    credentials: "same-origin"
+    credentials: "same-origin",
+    cache: "no-store"
   };
   if (options.body !== undefined) opts.body = JSON.stringify(options.body);
+
+  if (method !== "GET" && method !== "HEAD") {
+    try {
+      opts.headers["X-CSRF-Token"] = await ensureCsrfToken();
+    } catch (csrfErr) {
+      showToast("Security check failed. Refresh the page and try again.", "error");
+      throw csrfErr;
+    }
+  }
 
   let res, data;
   try {
