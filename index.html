@@ -4,46 +4,117 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HostelHub — Hostel Finder Platform</title>
-  <link rel="historypage" herf="/history.html">
-  <link rel="icon" href="/static/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <meta name="theme-color" content="#070a12" />
+  <meta name="description"
+    content="HostelHub helps students find verified hostels, PGs and rooms near their college — compare rent, distance and amenities, then connect directly with property owners." />
+  <title>HostelHub — Find a place you'll feel at home</title>
+
+  <link rel="icon" href="static/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16x16.png">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="/static/effects/role-backgrounds.css" />
+  <link rel="stylesheet" href="static/effects/role-backgrounds.css" />
+  <link rel="stylesheet" href="static/pro/upgrade.css" />
   <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <link rel="stylesheet" href="static/pro/light-refinement.css" />
   <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 </head>
 
 <body>
+  <!-- Theme + intro bootstrap: must run before the rest of the page paints. -->
+  <script src="static/pro/theme-boot.js"></script>
 
-  <div id="toast" class="toast" aria-live="polite"></div>
+  <!-- =================== CINEMATIC BRAND INTRO =================== -->
+  <div id="hhBoot" class="hh-boot" role="region" aria-label="HostelHub introduction">
+    <div class="hh-boot-bg" aria-hidden="true">
+      <span class="hh-boot-orb hh-boot-orb-a"></span>
+      <span class="hh-boot-orb hh-boot-orb-b"></span>
+      <span class="hh-boot-grid"></span>
+      <span class="hh-boot-beam"></span>
+      <span class="hh-boot-noise"></span>
+      <span class="hh-boot-frame"></span>
+    </div>
+
+    <div class="hh-boot-stage">
+      <div class="hh-boot-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M3 10.5 12 3l9 7.5" />
+          <path d="M5.5 9.5V21h13V9.5" />
+          <path d="M9.5 21v-6h5v6" />
+        </svg>
+      </div>
+
+      <p class="hh-boot-kicker">Find your place</p>
+
+      <div class="hh-boot-name" aria-hidden="true">
+        <span class="hh-boot-letter">H</span><span class="hh-boot-letter">o</span><span
+          class="hh-boot-letter">s</span><span class="hh-boot-letter">t</span><span
+          class="hh-boot-letter">e</span><span class="hh-boot-letter">l</span><span
+          class="hh-boot-letter hh-boot-letter-gold">H</span><span
+          class="hh-boot-letter hh-boot-letter-gold">u</span><span
+          class="hh-boot-letter hh-boot-letter-gold">b</span>
+      </div>
+      <span class="sr-only">HostelHub</span>
+
+      <p class="hh-boot-tagline">Verified stays. Real people. No broker runaround.</p>
+      <div class="hh-boot-line" aria-hidden="true"><span></span></div>
+    </div>
+
+    <button type="button" class="hh-boot-skip" id="hhBootSkip">
+      Skip intro <span aria-hidden="true">→</span>
+    </button>
+  </div>
+
+  <div class="hh-scroll-progress" id="hhScrollProgress" aria-hidden="true"></div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <!-- =================== PUBLIC LANDING PAGE =================== -->
   <div id="landingScreen" class="landing-screen">
 
+    <!-- ---------- Announcement strip ---------- -->
+    <div class="l-announce">
+      <div class="l-announce-inner">
+        <span class="l-announce-dot" aria-hidden="true"></span>
+        <span class="l-announce-copy"><strong>Admissions season is here.</strong> Verified rooms near 9 campuses — no broker fees.</span>
+        <button type="button" class="l-announce-link" data-action="browse-guest">Explore stays <span aria-hidden="true">→</span></button>
+      </div>
+    </div>
+
     <!-- ---------- Nav ---------- -->
-    <header class="l-nav">
+    <header class="l-nav" id="landingNav">
       <div class="l-nav-inner">
-        <a href="/" class="l-logo" data-action="back-to-landing" aria-label="HostelHub Home"><span class="l-logo-mark" aria-hidden="true">🏠</span>HostelHub</a>
+        <a href="/" class="l-logo" data-action="back-to-landing" aria-label="HostelHub Home">
+          <span class="l-logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M3 10.5 12 3l9 7.5" />
+              <path d="M5.5 9.5V21h13V9.5" />
+              <path d="M9.5 21v-6h5v6" />
+            </svg>
+          </span>
+          <span class="l-logo-text">Hostel<span>Hub</span></span>
+        </a>
 
         <nav class="l-nav-links" id="landingNavLinks" aria-label="Primary">
           <a href="#find">Find Hostels</a>
           <a href="#how">How It Works</a>
           <a href="#why">Why HostelHub</a>
           <a href="#owners">For Owners</a>
+          <a href="#faq">FAQs</a>
         </nav>
 
         <div class="l-nav-actions" id="landingNavActions">
-          <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme"
-            aria-label="Toggle theme">☀️</button>
+          <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Switch to light theme"
+            aria-label="Switch to light theme" aria-pressed="false">☀️</button>
           <button class="btn btn-ghost" data-action="go-landing-login">Log In</button>
           <button class="btn btn-gold" data-action="browse-guest">Get Started</button>
         </div>
@@ -63,6 +134,8 @@
       <div class="hh-bg" id="hhHeroBg" aria-hidden="true">
         <div class="hh-map" id="hhMap"></div>
         <div class="hh-glow" id="hhGlow"></div>
+        <div class="hh-aurora hh-aurora-1"></div>
+        <div class="hh-aurora hh-aurora-2"></div>
         <div class="hh-vignette"></div>
         <span class="hh-dot hh-d1"></span><span class="hh-dot hh-d2"></span>
         <span class="hh-dot hh-d3"></span><span class="hh-dot hh-d4"></span>
@@ -72,153 +145,462 @@
         <span class="hh-pin hh-pin3"></span><span class="hh-pin hh-pin4"></span>
       </div>
       <div class="l-hero-bg" aria-hidden="true"></div>
+      <div class="hh-noise" aria-hidden="true"></div>
+
       <div class="l-hero-inner">
 
         <div class="l-hero-copy reveal">
-          <span class="landing-eyebrow">Built for college students</span>
-          <h1 class="l-hero-title">Find a place<br>you'll feel at home.</h1>
-          <p class="l-hero-subtitle">Discover verified hostels and PGs near your college. Compare rent, facilities and
-            distance — then connect directly with property owners.</p>
+          <span class="landing-eyebrow"><span class="eyebrow-pulse" aria-hidden="true"></span>Student housing, simplified</span>
+          <h1 class="l-hero-title">Find a place<br>
+            you'll <span class="grad-text">feel at home</span>.</h1>
+          <p class="l-hero-subtitle">Verified hostels, PGs and rooms near your college — with real rent, real amenities
+            and a direct line to the owner. No brokers. No guesswork.</p>
 
-          <div class="landing-cta-row">
-            <button class="btn btn-gold btn-lg" data-action="browse-guest">Browse Hostels →</button>
-            <button class="btn btn-outline btn-lg" data-action="go-landing-signup">Create Account</button>
+          <form class="hero-search" id="heroQuickSearch" role="search" autocomplete="off">
+            <span class="hero-search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="m20 20-3.4-3.4"></path>
+              </svg>
+            </span>
+            <label class="sr-only" for="heroSearchInput">Search hostels by area, college or name</label>
+            <input type="text" id="heroSearchInput" placeholder="Search by area, college or hostel name…" />
+            <button class="btn btn-gold hero-search-btn" type="submit">Search stays</button>
+          </form>
+
+          <div class="hero-quick" aria-label="Popular searches">
+            <span class="hero-quick-label">Popular:</span>
+            <button type="button" class="hero-chip" data-hero-query="IIT Delhi">IIT Delhi</button>
+            <button type="button" class="hero-chip" data-hero-query="North Campus">North Campus</button>
+            <button type="button" class="hero-chip" data-hero-query="Girls Hostel">Girls hostels</button>
           </div>
 
-          <p class="l-trust-line">
-            <span>No middlemen</span><span class="l-dot">•</span><span>Verified listings</span><span
-              class="l-dot">•</span><span>Direct owner contact</span>
-          </p>
-        </div>
-
-        <div class="l-hero-visual reveal" aria-hidden="true">
-          <div class="l-hero-card">
-            <div class="l-hero-card-media">
-              <span class="l-hero-card-badge">✓ Verified</span>
+          <div class="hero-trust">
+            <div class="hero-avatars" aria-hidden="true">
+              <span class="hero-avatar">RM</span>
+              <span class="hero-avatar">AG</span>
+              <span class="hero-avatar">PN</span>
+              <span class="hero-avatar hero-avatar-more">+9k</span>
             </div>
-            <div class="l-hero-card-body">
-              <div class="l-hero-card-top">
-                <h3>Elite Girls Residency</h3>
-                <span class="l-hero-card-rating">★ 4.8</span>
+            <div class="hero-trust-copy">
+              <div class="hero-stars" aria-label="Rated 4.8 out of 5">
+                <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                <b>4.8</b>
               </div>
-              <p class="l-hero-card-loc">0.8 km from college · Engineering Block</p>
-              <div class="l-hero-card-amenities">
-                <span>WiFi</span><span>AC</span><span>Food</span><span>Security</span>
-              </div>
-              <div class="l-hero-card-foot">
-                <strong>₹8,500<span>/month</span></strong>
-                <span class="btn btn-sm btn-gold">View</span>
-              </div>
+              <span>Trusted by students across 9 campuses</span>
             </div>
           </div>
-
-          <div class="l-float-chip l-float-chip-1">✓ Verified Property</div>
-          <div class="l-float-chip l-float-chip-2">₹8,500 / month</div>
-          <div class="l-float-chip l-float-chip-3">0.8 km from college</div>
         </div>
 
+        <div class="l-hero-visual reveal">
+          <div class="hero-stage" id="heroStage">
+            <div class="hero-stage-glow" aria-hidden="true"></div>
+
+            <article class="hero-photo-card" tabindex="0">
+              <div class="hero-photo" role="img"
+                aria-label="A bright, modern student hostel near a college campus">
+                <span class="hero-photo-shade" aria-hidden="true"></span>
+                <span class="hero-verified">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m5 12.5 4.2 4.2L19 7"></path>
+                  </svg>
+                  Admin verified
+                </span>
+                <span class="hero-photo-type">Girls Hostel</span>
+              </div>
+              <div class="hero-photo-caption">
+                <div class="hero-photo-info">
+                  <span class="hero-photo-kicker">Featured stay</span>
+                  <h3>Elite Girls Residency</h3>
+                  <p>0.8 km from campus · Wi-Fi · Meals · AC</p>
+                </div>
+                <div class="hero-price">
+                  <strong>₹9,000</strong>
+                  <span>/month</span>
+                </div>
+              </div>
+            </article>
+
+            <div class="hero-mini-map" aria-hidden="true">
+              <svg viewBox="0 0 240 130" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="miniRoute" x1="0" y1="0" x2="240" y2="130">
+                    <stop offset="0" stop-color="#f4c45a" />
+                    <stop offset="1" stop-color="#5eead4" />
+                  </linearGradient>
+                </defs>
+                <path class="mini-road" d="M-10 96 C40 84 58 44 108 52 S182 92 252 60" />
+                <path class="mini-road mini-road-2" d="M22 -10 C38 40 84 48 104 54 S150 84 168 140" />
+                <path class="mini-road mini-road-3" d="M-10 30 C60 20 130 36 250 18" />
+                <path class="mini-route" d="M34 104 C64 82 78 70 112 62 S176 48 206 34" />
+                <circle class="mini-node" cx="34" cy="104" r="4" />
+                <circle class="mini-node mini-node-end" cx="206" cy="34" r="5" />
+              </svg>
+              <span class="hero-map-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z"></path>
+                  <circle cx="12" cy="10" r="2.5"></circle>
+                </svg>
+                6 min walk to class
+              </span>
+            </div>
+
+            <div class="hero-float hero-float-1">
+              <span class="hero-float-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3 4.5 6v5.5c0 4.4 3 8.1 7.5 9.5 4.5-1.4 7.5-5.1 7.5-9.5V6L12 3Z"></path>
+                  <path d="m8.8 12.2 2.2 2.2 4.2-4.4"></path>
+                </svg>
+              </span>
+              <span><strong>Verified</strong><small>by our team</small></span>
+            </div>
+
+            <div class="hero-float hero-float-2">
+              <span class="hero-float-stars" aria-hidden="true">★★★★★</span>
+              <span><strong>4.8 / 5</strong><small>student rating</small></span>
+            </div>
+
+            <div class="hero-float hero-float-3">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span><strong>3 rooms left</strong><small>this semester</small></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="hero-scroll-hint" aria-hidden="true">
+        <span>Scroll to explore</span>
+        <span class="hero-scroll-line"></span>
+      </div>
+    </section>
+
+    <!-- ---------- Colleges / social proof strip ---------- -->
+    <section class="l-colleges" aria-label="Colleges HostelHub covers">
+      <div class="l-colleges-inner">
+        <p class="l-colleges-label">Students from these campuses use HostelHub</p>
+        <div class="l-college-marquee">
+          <div class="l-college-track" id="landingColleges">
+            <span>Delhi University</span>
+            <span>IIT Delhi</span>
+            <span>JNU</span>
+            <span>Jamia Millia Islamia</span>
+            <span>DTU</span>
+            <span>Shivaji University</span>
+            <span>COEP Tech</span>
+            <span>VIT Pune</span>
+            <span>KIT Kolhapur</span>
+            <span aria-hidden="true">Delhi University</span>
+            <span aria-hidden="true">IIT Delhi</span>
+            <span aria-hidden="true">JNU</span>
+            <span aria-hidden="true">Jamia Millia Islamia</span>
+            <span aria-hidden="true">DTU</span>
+            <span aria-hidden="true">Shivaji University</span>
+            <span aria-hidden="true">COEP Tech</span>
+            <span aria-hidden="true">VIT Pune</span>
+            <span aria-hidden="true">KIT Kolhapur</span>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- ---------- Trust / stats ---------- -->
     <section class="l-stats-section reveal">
-      <p class="l-stats-kicker">Trusted by students across campus</p>
-      <div class="landing-stats" id="landingStats"></div>
+      <div class="l-stats-shell">
+        <div class="l-stats-copy">
+          <span class="section-eyebrow">By the numbers</span>
+          <h2>Real listings.<br>Real students.</h2>
+          <p>Everything you see here comes straight from the platform — not a marketing deck.</p>
+        </div>
+        <div class="landing-stats" id="landingStats"></div>
+      </div>
     </section>
 
     <!-- ---------- Why HostelHub ---------- -->
     <section class="l-section" id="why">
       <div class="l-section-head reveal">
-        <h2>Why HostelHub?</h2>
-        <p>Everything you need to find a place you can actually trust.</p>
+        <span class="section-eyebrow">Why HostelHub</span>
+        <h2>A calmer way to find your next home.</h2>
+        <p>We rebuilt the hostel hunt around the things students actually care about.</p>
       </div>
       <div class="l-feature-grid">
-        <div class="l-feature-card reveal">
-          <div class="l-feature-icon">✓</div>
-          <h3>Verified Listings</h3>
-          <p>Find properties that have been reviewed and approved before they ever reach you.</p>
-        </div>
-        <div class="l-feature-card reveal">
-          <div class="l-feature-icon">⇄</div>
-          <h3>Compare Before You Decide</h3>
-          <p>Compare rent, distance, rooms and facilities side-by-side in one place.</p>
-        </div>
-        <div class="l-feature-card reveal">
-          <div class="l-feature-icon">✉</div>
-          <h3>Direct Owner Contact</h3>
-          <p>Connect directly with property owners — no unnecessary middlemen or agents.</p>
-        </div>
-        <div class="l-feature-card reveal">
-          <div class="l-feature-icon">🎓</div>
-          <h3>Made for Students</h3>
-          <p>Search based on the things students actually care about — distance, budget, roommates.</p>
-        </div>
+        <article class="l-feature-card l-feature-wide reveal">
+          <div class="l-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3 4.5 6v5.5c0 4.4 3 8.1 7.5 9.5 4.5-1.4 7.5-5.1 7.5-9.5V6L12 3Z"></path>
+              <path d="m8.8 12.2 2.2 2.2 4.2-4.4"></path>
+            </svg>
+          </div>
+          <h3>Verified before it reaches you</h3>
+          <p>Every listing is reviewed by our admin team before it goes live. No fake addresses, no bait pricing,
+            no surprise "agent fees."</p>
+          <ul class="l-check-list">
+            <li>Manual listing review</li>
+            <li>Accurate rent &amp; distance</li>
+            <li>Removed if it doesn't add up</li>
+          </ul>
+          <div class="l-feature-badge">Admin-moderated</div>
+        </article>
+
+        <article class="l-feature-card reveal">
+          <div class="l-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19V9"></path>
+              <path d="M10 19V5"></path>
+              <path d="M16 19v-7"></path>
+              <path d="M22 19V8"></path>
+            </svg>
+          </div>
+          <h3>Compare what matters</h3>
+          <p>Rent, distance, rooms and amenities side by side — so the decision takes minutes, not weekends.</p>
+          <div class="l-mini-bars" aria-hidden="true">
+            <span style="--w: 86%"></span>
+            <span style="--w: 64%"></span>
+            <span style="--w: 42%"></span>
+          </div>
+        </article>
+
+        <article class="l-feature-card reveal">
+          <div class="l-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a8 8 0 0 1-8 8H7l-4 2 1.4-4.2A8 8 0 1 1 21 12Z"></path>
+              <path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"></path>
+            </svg>
+          </div>
+          <h3>Talk to the owner. Directly.</h3>
+          <p>Send an in-app inquiry, WhatsApp or call — whichever feels natural. Your message goes straight to the
+            person who runs the property.</p>
+          <div class="l-mini-chat" aria-hidden="true">
+            <span class="l-mini-chat-bubble">Is a room available?</span>
+            <span class="l-mini-chat-bubble l-mini-chat-reply">Yes — come see it today.</span>
+          </div>
+        </article>
+
+        <article class="l-feature-card reveal">
+          <div class="l-feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-3.4-3.4"></path>
+              <path d="M8 11h6"></path>
+            </svg>
+          </div>
+          <h3>Search built for students</h3>
+          <p>Filter by hostel type, find your college, and save favourites while you shortlist. Your search stays
+            yours.</p>
+          <div class="l-mini-chips" aria-hidden="true">
+            <span>Near campus</span><span>Under ₹9k</span><span>Girls only</span>
+          </div>
+        </article>
       </div>
     </section>
 
     <!-- ---------- How it works ---------- -->
     <section class="l-section l-section-alt" id="how">
       <div class="l-section-head reveal">
-        <h2>How It Works</h2>
-        <p>From search to move-in, in three simple steps.</p>
+        <span class="section-eyebrow">How it works</span>
+        <h2>From search to move-in, in three steps.</h2>
+        <p>No forms to chase, no middlemen to negotiate with.</p>
       </div>
       <div class="l-steps">
         <div class="l-step reveal">
           <span class="l-step-num">01</span>
-          <h3>Search</h3>
-          <p>Find hostels and PGs near your college in seconds.</p>
+          <span class="l-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-3.4-3.4"></path>
+            </svg>
+          </span>
+          <h3>Tell us where you study</h3>
+          <p>Search by college, area or hostel name and see what's genuinely nearby.</p>
         </div>
         <div class="l-step-line" aria-hidden="true"></div>
         <div class="l-step reveal">
           <span class="l-step-num">02</span>
-          <h3>Compare</h3>
-          <p>Compare rent, distance and amenities side-by-side.</p>
+          <span class="l-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7h16M4 12h10M4 17h7"></path>
+            </svg>
+          </span>
+          <h3>Compare your shortlist</h3>
+          <p>Put up to three hostels side by side and weigh rent, distance and facilities.</p>
         </div>
         <div class="l-step-line" aria-hidden="true"></div>
         <div class="l-step reveal">
           <span class="l-step-num">03</span>
-          <h3>Connect</h3>
-          <p>Contact the owner directly and lock in your room.</p>
+          <span class="l-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a8 8 0 0 1-8 8H7l-4 2 1.4-4.2A8 8 0 1 1 21 12Z"></path>
+            </svg>
+          </span>
+          <h3>Connect and move in</h3>
+          <p>Message or call the owner directly, schedule a visit and lock in your room.</p>
         </div>
       </div>
+      <p class="l-steps-note reveal">Free for students. Always.</p>
     </section>
 
     <!-- ---------- Product preview (real data) ---------- -->
     <section class="l-section" id="find">
       <div class="l-section-head reveal">
-        <h2>See what's waiting for you</h2>
-        <p>A few verified listings, pulled straight from HostelHub.</p>
+        <span class="section-eyebrow">Live on HostelHub</span>
+        <h2>See what's waiting for you.</h2>
+        <p>A few verified listings, pulled straight from the platform.</p>
       </div>
       <div class="l-preview-grid" id="landingPreview"></div>
       <div class="l-preview-cta reveal">
-        <button class="btn btn-outline btn-lg" data-action="browse-guest">Browse All Hostels →</button>
+        <button class="btn btn-outline btn-lg" data-action="browse-guest">Browse all hostels <span
+            aria-hidden="true">→</span></button>
+      </div>
+    </section>
+
+    <!-- ---------- Trust band ---------- -->
+    <section class="l-trust-band reveal" aria-labelledby="trustBandTitle">
+      <div class="l-trust-band-inner">
+        <div class="l-trust-band-copy">
+          <span class="section-eyebrow">Peace of mind</span>
+          <h2 id="trustBandTitle">Every listing earns its place.</h2>
+          <p>We'd rather show you fewer, better options than a wall of maybes.</p>
+        </div>
+        <div class="l-trust-band-points">
+          <div class="l-trust-point">
+            <span class="l-trust-point-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 4.5 6v5.5c0 4.4 3 8.1 7.5 9.5 4.5-1.4 7.5-5.1 7.5-9.5V6L12 3Z"></path>
+                <path d="m8.8 12.2 2.2 2.2 4.2-4.4"></path>
+              </svg>
+            </span>
+            <div><strong>Admin-reviewed</strong><span>Listings go live only after a human check.</span></div>
+          </div>
+          <div class="l-trust-point">
+            <span class="l-trust-point-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3Z"></path>
+              </svg>
+            </span>
+            <div><strong>Student reviews</strong><span>Real experiences from students who stayed.</span></div>
+          </div>
+          <div class="l-trust-point">
+            <span class="l-trust-point-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M8.5 12.2 11 14.7l4.5-5"></path>
+              </svg>
+            </span>
+            <div><strong>Zero brokerage</strong><span>No agents, no listing fees for students.</span></div>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- ---------- Student / Owner split ---------- -->
     <section class="l-split" id="owners">
       <div class="l-split-card reveal">
+        <span class="section-eyebrow">For students</span>
         <h3>Your next room is closer than you think.</h3>
-        <p>Thousands of students have already found their place through HostelHub.</p>
-        <button class="btn btn-gold btn-lg" data-action="browse-guest">Find a Hostel →</button>
+        <p>Browse verified stays, shortlist your favourites and reach out when you're ready. Your account keeps
+          everything in one place.</p>
+        <ul class="l-split-list">
+          <li>Save and compare hostels</li>
+          <li>Track every inquiry</li>
+          <li>Read honest student reviews</li>
+        </ul>
+        <button class="btn btn-gold btn-lg" data-action="browse-guest">Find a hostel <span aria-hidden="true">→</span></button>
       </div>
+
       <div class="l-split-card l-split-card-dark reveal">
-        <h3>Have a property? Put it in front of students.</h3>
-        <p>List your hostel or PG and start receiving inquiries directly.</p>
-        <button class="btn btn-outline btn-lg" data-action="go-owner-portal">List Your Property →</button>
+        <span class="section-eyebrow">For property owners</span>
+        <h3>Put your property in front of students.</h3>
+        <p>Create a listing, add your location on the map and start receiving inquiries directly from students.</p>
+        <div class="l-owner-mock" aria-hidden="true">
+          <div class="l-owner-mock-top">
+            <span class="l-owner-mock-dot"></span>
+            <span class="l-owner-mock-dot"></span>
+            <span class="l-owner-mock-dot"></span>
+            <span class="l-owner-mock-title">Owner dashboard</span>
+          </div>
+          <div class="l-owner-mock-body">
+            <div class="l-owner-mock-stat"><b>3</b><span>Live</span></div>
+            <div class="l-owner-mock-stat"><b>12</b><span>Inquiries</span></div>
+            <div class="l-owner-mock-stat"><b>486</b><span>Views</span></div>
+          </div>
+          <div class="l-owner-mock-bars"><span style="--h: 42%"></span><span style="--h: 68%"></span><span
+              style="--h: 54%"></span><span style="--h: 88%"></span><span style="--h: 74%"></span><span
+              style="--h: 96%"></span></div>
+        </div>
+        <button class="btn btn-outline btn-lg" data-action="go-owner-portal">List your property <span
+            aria-hidden="true">→</span></button>
+      </div>
+    </section>
+
+    <!-- ---------- FAQ ---------- -->
+    <section class="l-section l-faq" id="faq">
+      <div class="l-section-head reveal">
+        <span class="section-eyebrow">Questions, answered</span>
+        <h2>Before you pack your bags.</h2>
+        <p>The things students ask us most often.</p>
+      </div>
+      <div class="l-faq-grid">
+        <details class="l-faq-item reveal">
+          <summary>Is HostelHub free for students?</summary>
+          <p>Yes. Browsing, saving, comparing and contacting owners is free for students. We don't charge brokerage or
+            listing fees.</p>
+        </details>
+        <details class="l-faq-item reveal">
+          <summary>How are listings verified?</summary>
+          <p>Owners submit their property details. Our admin team reviews the listing — including rent, location and
+            amenities — before it goes live for students.</p>
+        </details>
+        <details class="l-faq-item reveal">
+          <summary>Can I talk to the owner directly?</summary>
+          <p>Yes. Once you're signed in as a student you can send an in-app inquiry, message the owner on WhatsApp or
+            call them directly from the listing.</p>
+        </details>
+        <details class="l-faq-item reveal">
+          <summary>Do I need an account to browse?</summary>
+          <p>No. You can browse hostels as a guest. You'll need an account only when you want to save favourites,
+            compare later or contact an owner.</p>
+        </details>
+        <details class="l-faq-item reveal">
+          <summary>What if a listing looks inaccurate?</summary>
+          <p>Reach out through the contact details in the listing or report it to the admin team. Listings that don't
+            match reality can be removed from the platform.</p>
+        </details>
+        <details class="l-faq-item reveal">
+          <summary>Can I list more than one property?</summary>
+          <p>Absolutely. From the owner dashboard you can add multiple listings, edit details, set availability and
+            track inquiries for each property.</p>
+        </details>
       </div>
     </section>
 
     <!-- ---------- Final CTA ---------- -->
     <section class="l-final-cta reveal">
-      <h2>Ready to find your next home?</h2>
-      <p>Search verified hostels, compare your options and connect directly with owners.</p>
-      <div class="landing-cta-row">
-        <button class="btn btn-gold btn-lg" data-action="browse-guest">Browse Hostels</button>
-        <button class="btn btn-outline btn-lg" data-action="go-landing-signup">Create Account</button>
+      <div class="l-final-cta-inner">
+        <span class="l-final-glow" aria-hidden="true"></span>
+        <span class="section-eyebrow">Start today</span>
+        <h2>Your next home is one search away.</h2>
+        <p>Join students who found their place the calmer way — verified, direct and without the broker runaround.</p>
+        <div class="landing-cta-row">
+          <button class="btn btn-gold btn-lg" data-action="browse-guest">Browse hostels <span
+              aria-hidden="true">→</span></button>
+          <button class="btn btn-outline btn-lg" data-action="go-landing-signup">Create free account</button>
+        </div>
+        <p class="l-final-note">No brokerage · Free for students · Direct owner contact</p>
       </div>
     </section>
-
 
   </div>
 
@@ -229,11 +611,10 @@
         <a href="/" class="nav-logo" data-action="back-to-landing" aria-label="HostelHub Home">🏠 HostelHub</a>
       </div>
       <div class="nav-right">
-        <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">☀️</button>
+        <button class="icon-btn theme-toggle-btn" data-action="toggle-theme" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false">☀️</button>
       </div>
     </header>
-    <div class="auth-orb orb-1">
-    </div>
+    <div class="auth-orb orb-1"></div>
     <div class="role-bg" aria-hidden="true">
       <canvas class="role-bg-canvas"></canvas>
       <div class="role-bg-glow"></div>
@@ -251,23 +632,15 @@
       <div class="role-bg-grid"></div>
     </div>
     <header class="navbar">
-      
-<div class="nav-left">
-  <a href="/" class="nav-logo" id="navLogo" data-action="back-to-landing" aria-label="HostelHub Home">🏠 HostelHub</a>
-  <span class="nav-role-tag" id="navRoleTag">Student</span>
-</div>
+      <div class="nav-left">
+        <a href="/" class="nav-logo" id="navLogo" data-action="back-to-landing" aria-label="HostelHub Home">🏠 HostelHub</a>
+        <span class="nav-role-tag" id="navRoleTag">Student</span>
+      </div>
 
-<button
-  class="app-mobile-menu"
-  id="appMobileMenu"
-  type="button"
-  aria-label="Open navigation menu"
-  aria-controls="navTabs"
-  aria-expanded="false">
-  ☰
-</button>
+      <button class="app-mobile-menu" id="appMobileMenu" type="button" aria-label="Open navigation menu"
+        aria-controls="navTabs" aria-expanded="false">☰</button>
 
-<nav class="nav-tabs" id="navTabs"></nav>
+      <nav class="nav-tabs" id="navTabs"></nav>
 
       <div class="nav-right" id="navRight"></div>
     </header>
@@ -278,245 +651,207 @@
   <!-- =====================================================
      HOSTELHUB — SHARED SITE FOOTER
      Place outside #landingScreen, #authScreen and #mainApp
-====================================================== -->
-<footer class="l-footer" id="siteFooter">
-  <div class="l-footer-container">
+  ====================================================== -->
+  <footer class="l-footer" id="siteFooter">
+    <div class="l-footer-container">
 
-    <!-- Main footer grid -->
-    <div class="l-footer-top">
+      <!-- Main footer grid -->
+      <div class="l-footer-top">
 
-      <!-- Brand -->
-      <section class="l-footer-brand" aria-label="About HostelHub">
-        <a class="l-footer-logo" href="/" data-action="back-to-landing" data-footer-action="home" aria-label="HostelHub Home">
-          <span class="l-footer-logo-mark" aria-hidden="true">⌂</span>
-          <span class="l-footer-logo-name">Hostel<span>Hub</span></span>
-        </a>
+        <!-- Brand -->
+        <section class="l-footer-brand" aria-label="About HostelHub">
+          <a class="l-footer-logo" href="/" data-action="back-to-landing" data-footer-action="home"
+            aria-label="HostelHub Home">
+            <span class="l-footer-logo-mark" aria-hidden="true">⌂</span>
+            <span class="l-footer-logo-name">Hostel<span>Hub</span></span>
+          </a>
 
-        <p class="l-footer-tagline">
-          Find your place. Start your journey.
-        </p>
+          <p class="l-footer-tagline">Find your place. Start your journey.</p>
 
-        <p class="l-footer-description">
-          Discover hostels, PGs and student accommodation near your
-          college. Compare your options and connect with property owners
-          through one convenient platform.
-        </p>
+          <p class="l-footer-description">
+            Discover hostels, PGs and student accommodation near your college. Compare your options and connect with
+            property owners through one convenient platform.
+          </p>
 
-        <div class="l-footer-badges">
-          <span class="l-footer-badge">
-            <span aria-hidden="true">✓</span>
-            Built for students
-          </span>
-          <span class="l-footer-badge">
-            <span aria-hidden="true">⌖</span>
-            Explore nearby stays
-          </span>
+          <div class="l-footer-badges">
+            <span class="l-footer-badge"><span aria-hidden="true">✓</span> Built for students</span>
+            <span class="l-footer-badge"><span aria-hidden="true">⌖</span> Explore nearby stays</span>
+          </div>
+        </section>
+
+        <!-- Explore -->
+        <nav class="l-footer-col" aria-label="Explore HostelHub">
+          <h3>Explore</h3>
+          <a href="#find" data-footer-action="find">Find Hostels</a>
+          <a href="#find" data-footer-action="compare">Compare Properties</a>
+          <a href="#how" data-footer-action="how">How It Works</a>
+          <a href="#faq" data-footer-action="faq">FAQs</a>
+          <a href="#top" data-footer-action="home">Home</a>
+        </nav>
+
+        <!-- Property owners -->
+        <nav class="l-footer-col" aria-label="Property owners">
+          <h3>For Property Owners</h3>
+          <a href="#" data-action="go-owner-portal">List Your Property</a>
+          <a href="#" data-action="go-owner-portal">Owner Portal</a>
+        </nav>
+
+        <!-- Project and team -->
+        <nav class="l-footer-col" aria-label="Project and team">
+          <h3>Our Project</h3>
+          <a href="https://github.com/OjasYadav-shadowmonarch/hostelhub-postgres" target="_blank"
+            rel="noopener noreferrer">
+            <span class="l-footer-link-icon" aria-hidden="true">⌘</span>
+            GitHub Repository
+            <span class="l-footer-external" aria-hidden="true">↗</span>
+          </a>
+          <a href="#footerTeam" data-footer-action="team">Meet the Team</a>
+          <a href="#footerTeam" data-footer-action="contributors">Contributors</a>
+        </nav>
+
+        <!-- Support and legal -->
+        <nav class="l-footer-col" aria-label="Support and legal">
+          <h3>Information</h3>
+          <a href="#footerAbout" data-footer-action="about">About HostelHub</a>
+          <a href="#footerContact" data-footer-action="contact">Contact</a>
+          <a href="#faq" data-footer-action="help">Help &amp; FAQs</a>
+          <a href="#footerPrivacy" data-footer-action="privacy">Privacy Policy</a>
+          <a href="#footerTerms" data-footer-action="terms">Terms of Service</a>
+        </nav>
+
+      </div>
+
+      <!-- Platform benefits -->
+      <div class="l-footer-benefits" aria-label="HostelHub benefits">
+        <div class="l-footer-benefit">
+          <span class="l-footer-benefit-icon" aria-hidden="true">⌕</span>
+          <span><strong>Discover</strong><small>Explore accommodation options</small></span>
+        </div>
+
+        <div class="l-footer-benefit">
+          <span class="l-footer-benefit-icon" aria-hidden="true">⇄</span>
+          <span><strong>Compare</strong><small>Evaluate your choices</small></span>
+        </div>
+
+        <div class="l-footer-benefit">
+          <span class="l-footer-benefit-icon" aria-hidden="true">⌂</span>
+          <span><strong>Connect</strong><small>Reach out to property owners</small></span>
+        </div>
+      </div>
+
+      <!-- Team / developer profiles -->
+      <section class="l-footer-team" id="footerTeam" aria-labelledby="footerTeamTitle">
+        <div class="l-footer-team-heading">
+          <div>
+            <span class="l-footer-eyebrow">THE PEOPLE BEHIND THE PROJECT</span>
+            <h3 id="footerTeamTitle">Built by our team.</h3>
+            <p>Connect with the developers and explore their work.</p>
+          </div>
+
+          <a class="l-footer-github-button" href="https://github.com/OjasYadav-shadowmonarch/hostelhub-postgres"
+            target="_blank" rel="noopener noreferrer">
+            <span aria-hidden="true">⌘</span>
+            View source code
+            <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+
+        <div class="l-footer-team-grid">
+
+          <article class="l-footer-member">
+            <div class="l-footer-avatar" aria-hidden="true">OY</div>
+            <div class="l-footer-member-info">
+              <h4>Ojas Yadav</h4>
+              <p>Developer · HostelHub</p>
+              <div class="l-footer-member-links">
+                <a href="https://github.com/OjasYadav-shadowmonarch" target="_blank" rel="noopener noreferrer"
+                  aria-label="Ojas Yadav on GitHub">GitHub ↗</a>
+                <a href="https://www.linkedin.com/in/ojas-yadav-61b3042b9" target="_blank" rel="noopener noreferrer"
+                  aria-label="Ojas Yadav on LinkedIn">LinkedIn ↗</a>
+              </div>
+            </div>
+          </article>
+
+          <article class="l-footer-member">
+            <div class="l-footer-avatar" aria-hidden="true">AL</div>
+            <div class="l-footer-member-info">
+              <h4>Aryan Linge</h4>
+              <p>Designer + Backend</p>
+              <div class="l-footer-member-links">
+                <a href="https://github.com/bytebyaryan07" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+                <a href="https://www.linkedin.com/in/aryan-linge-219a82378" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+              </div>
+            </div>
+          </article>
+
+          <article class="l-footer-member">
+            <div class="l-footer-avatar" aria-hidden="true">SK</div>
+            <div class="l-footer-member-info">
+              <h4>Shreyash Kakad</h4>
+              <p>Team member</p>
+              <div class="l-footer-member-links">
+                <span class="l-footer-member-muted">Profile coming soon</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="l-footer-member">
+            <div class="l-footer-avatar" aria-hidden="true">PK</div>
+            <div class="l-footer-member-info">
+              <h4>Pradyumn Kamble</h4>
+              <p>Team member</p>
+              <div class="l-footer-member-links">
+                <a href="https://github.com/Pradyumnkamble" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+                <a href="https://www.linkedin.com/in/pradyumn-kamble-5a9b49427" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+              </div>
+            </div>
+          </article>
+
         </div>
       </section>
 
-      <!-- Explore -->
-      <nav class="l-footer-col" aria-label="Explore HostelHub">
-        <h3>Explore</h3>
-        <a href="#find" data-footer-action="find">Find Hostels</a>
-        <a href="#find" data-footer-action="compare">Compare Properties</a>
-        <a href="#how" data-footer-action="how">How It Works</a>
-        <a href="#top" data-footer-action="home">Home</a>
-      </nav>
-
-      <!-- Property owners -->
-      <nav class="l-footer-col" aria-label="Property owners">
-        <h3>For Property Owners</h3>
-        <a href="#" data-action="go-owner-portal">List Your Property</a>
-        <a href="#" data-action="go-owner-portal">Owner Portal</a>
-      </nav>
-
-      <!-- Project and team -->
-      <nav class="l-footer-col" aria-label="Project and team">
-        <h3>Our Project</h3>
-        <a
-          href="https://github.com/OjasYadav-shadowmonarch/hostelhub-postgres"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span class="l-footer-link-icon" aria-hidden="true">⌘</span>
-          GitHub Repository
-          <span class="l-footer-external" aria-hidden="true">↗</span>
-        </a>
-        <a href="#footerTeam" data-footer-action="team">Meet the Team</a>
-        <a href="#footerTeam" data-footer-action="contributors">Contributors</a>
-      </nav>
-
-      <!-- Support and legal -->
-      <nav class="l-footer-col" aria-label="Support and legal">
-        <h3>Information</h3>
-        <a href="#footerAbout" data-footer-action="about">About HostelHub</a>
-        <a href="#footerContact" data-footer-action="contact">Contact</a>
-        <a href="#footerHelp" data-footer-action="help">Help &amp; FAQs</a>
-        <a href="#footerPrivacy" data-footer-action="privacy">Privacy Policy</a>
-        <a href="#footerTerms" data-footer-action="terms">Terms of Service</a>
-      </nav>
-
-    </div>
-
-    <!-- Platform benefits -->
-    <div class="l-footer-benefits" aria-label="HostelHub benefits">
-      <div class="l-footer-benefit">
-        <span class="l-footer-benefit-icon" aria-hidden="true">⌕</span>
-        <span>
-          <strong>Discover</strong>
-          <small>Explore accommodation options</small>
-        </span>
-      </div>
-
-      <div class="l-footer-benefit">
-        <span class="l-footer-benefit-icon" aria-hidden="true">⇄</span>
-        <span>
-          <strong>Compare</strong>
-          <small>Evaluate your choices</small>
-        </span>
-      </div>
-
-      <div class="l-footer-benefit">
-        <span class="l-footer-benefit-icon" aria-hidden="true">⌂</span>
-        <span>
-          <strong>Connect</strong>
-          <small>Reach out to property owners</small>
-        </span>
-      </div>
-    </div>
-
-    <!-- Team / developer profiles -->
-    <section class="l-footer-team" id="footerTeam" aria-labelledby="footerTeamTitle">
-      <div class="l-footer-team-heading">
-        <div>
-          <span class="l-footer-eyebrow">THE PEOPLE BEHIND THE PROJECT</span>
-          <h3 id="footerTeamTitle">Built by our team.</h3>
-          <p>Connect with the developers and explore their work.</p>
+      <!-- Bottom bar -->
+      <div class="l-footer-bottom">
+        <div class="l-footer-copyright">
+          <span>© <span id="footerYear"></span> HostelHub.</span>
+          <span>All rights reserved.</span>
         </div>
 
-        <a
-          class="l-footer-github-button"
-          href="https://github.com/OjasYadav-shadowmonarch/hostelhub-postgres"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span aria-hidden="true">⌘</span>
-          View source code
-          <span aria-hidden="true">↗</span>
-        </a>
+        <p class="l-footer-credit">Designed to make student living easier.</p>
+
+        <button class="l-footer-back-top" type="button" data-footer-action="backtop" aria-label="Back to top">
+          Back to top <span aria-hidden="true">↑</span>
+        </button>
       </div>
 
-      <div class="l-footer-team-grid">
-
-        <!-- Developer 1: replace/confirm the details below -->
-        <article class="l-footer-member">
-          <div class="l-footer-avatar" aria-hidden="true">OY</div>
-          <div class="l-footer-member-info">
-            <h4>Ojas Yadav</h4>
-            <p>Developer · HostelHub</p>
-            <div class="l-footer-member-links">
-              <a
-                href="https://github.com/OjasYadav-shadowmonarch"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Ojas Yadav on GitHub"
-              >GitHub ↗</a>
-              <a
-                href="https://www.linkedin.com/in/ojas-yadav-61b3042b9"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Ojas Yadav on LinkedIn"
-              >LinkedIn ↗</a>
-            </div>
-          </div>
-        </article>
-
-        <!-- Duplicate this article for each verified team member.
-             Replace the name, initials, role and LinkedIn URL. -->
-        <article class="l-footer-member">
-          <div class="l-footer-avatar" aria-hidden="true">AL</div>
-          <div class="l-footer-member-info">
-            <h4>Aryan Linge</h4>
-            <p>DESIGNER + BACKEND</p>
-            <div class="l-footer-member-links">
-              <a href="https://github.com/bytebyaryan07"
-                 target="_blank" rel="noopener noreferrer">GitHub ↗</a>
-              <a href="https://www.linkedin.com/in/aryan-linge-219a82378"
-                 target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
-            </div>
-          </div>
-        </article>
-        
-        <article class="l-footer-member">
-          <div class="l-footer-avatar" aria-hidden="true">SK</div>
-          <div class="l-footer-member-info">
-            <h4>Shreyash kakad</h4>
-            <p>Team member</p>
-            <div class="l-footer-member-links">
-              <a href=""
-                 target="_blank" rel="noopener noreferrer">GitHub ↗</a>
-              <a href=""
-                 target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
-            </div>
-          </div>
-        </article>
-
-        <article class="l-footer-member">
-          <div class="l-footer-avatar" aria-hidden="true">SK</div>
-          <div class="l-footer-member-info">
-            <h4>Pradyumn kamble</h4>
-            <p>Team member</p>
-            <div class="l-footer-member-links">
-              <a href="https://github.com/Pradyumnkamble"
-                 target="_blank" rel="noopener noreferrer">GitHub ↗</a>
-              <a href="https://www.linkedin.com/in/pradyumn-kamble-5a9b49427"
-                 target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
-            </div>
-          </div>
-        </article>
-
-
-
-        <!-- Add or remove member cards to match your actual team. -->
-
-      </div>
-    </section>
-
-    <!-- Bottom bar -->
-    <div class="l-footer-bottom">
-      <div class="l-footer-copyright">
-        <span>© <span id="footerYear"></span> HostelHub.</span>
-        <span>All rights reserved.</span>
-      </div>
-
-      <p class="l-footer-credit">
-        Designed to make student living easier.
-      </p>
-
-      <button
-        class="l-footer-back-top"
-        type="button"
-        data-footer-action="backtop"
-        aria-label="Back to top"
-      >
-        Back to top <span aria-hidden="true">↑</span>
-      </button>
     </div>
-
-  </div>
-</footer>
-<!-- ================= END HOSTELHUB FOOTER ================= -->
+  </footer>
+  <!-- ================= END HOSTELHUB FOOTER ================= -->
 
   <!-- =================== MODAL =================== -->
   <div class="modal-overlay" id="modalOverlay" hidden>
-    <div class="modal" id="modalBody"></div>
+    <div class="modal" id="modalBody" role="dialog" aria-modal="true" tabindex="-1"></div>
   </div>
+
+  <!-- Floating back-to-top (app + landing) -->
+  <button type="button" class="hh-to-top" id="hhToTop" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 19V5"></path>
+      <path d="m5 12 7-7 7 7"></path>
+    </svg>
+  </button>
+
+  <noscript>
+    <div class="hh-noscript">HostelHub needs JavaScript enabled to load listings and sign you in.</div>
+  </noscript>
 
   <!-- hidden file input reused by the listing form -->
   <input type="file" id="listingImageFile" accept="image/*" hidden />
 
   <script src="script.js"></script>
-  <script src="/static/effects/role-backgrounds.js" defer></script>
+  <script src="static/effects/role-backgrounds.js" defer></script>
+  <script src="static/pro/upgrade.js" defer></script>
 </body>
 
 </html>

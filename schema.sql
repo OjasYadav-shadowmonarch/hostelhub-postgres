@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS wishlists (
     UNIQUE(student_id, hostel_id)
 );
 
+CREATE TABLE IF NOT EXISTS rate_limit_windows (
+    bucket TEXT NOT NULL,
+    key TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (bucket, key)
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
 CREATE INDEX IF NOT EXISTS idx_hostels_owner     ON hostels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_hostels_college   ON hostels(college);
@@ -97,5 +105,6 @@ CREATE INDEX IF NOT EXISTS idx_reviews_hostel    ON reviews(hostel_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_student   ON reviews(student_id);
 CREATE INDEX IF NOT EXISTS idx_wishlists_student ON wishlists(student_id);
 CREATE INDEX IF NOT EXISTS idx_wishlists_hostel  ON wishlists(hostel_id);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_window ON rate_limit_windows(window_start);
 
 COMMIT;
