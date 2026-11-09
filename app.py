@@ -1392,7 +1392,7 @@ def api_login():
 
     db = get_db()
     row = db.execute(
-        "SELECT * FROM users WHERE lower(username)=lower(%s)",
+        "SELECT * FROM users WHERE lower(username)=lower(%s) AND deleted_at IS NULL",
         (username,)
     ).fetchone()
 
