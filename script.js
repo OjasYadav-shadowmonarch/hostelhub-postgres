@@ -2363,6 +2363,7 @@ function renderAdminView() {
       <button class="subtab ${state.adminSubtab === "users" ? "active" : ""}" data-action="admin-subtab" data-id="users">Users</button>
       <button class="subtab ${state.adminSubtab === "reports" ? "active" : ""}" data-action="admin-subtab" data-id="reports">Reports</button>
       <button class="subtab ${state.adminSubtab === "deleted" ? "active" : ""}" data-action="admin-subtab" data-id="deleted">Deleted Accounts</button>
+      <button class="subtab" data-action="open-history">History</button>
     </div>`;
 
   let content;
@@ -3007,6 +3008,7 @@ const ACTIONS = {
   "nav": (id, btn) => {   navigate(btn.dataset.view);   closeAppMobileNav(); },
   "owner-subtab": (id) => ownerSubtabSwitch(id),
   "admin-subtab": (id) => adminSubtabSwitch(id),
+  "open-history": () => { window.location.href = "/history"; },
   "run-search": () => runSearch(),
   "filter-type": (id) => filterByType(id),
   "toggle-compare": (id) => toggleCompare(id),
