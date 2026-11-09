@@ -1224,6 +1224,13 @@ function renderProfileView() {
         <div class="field-group"><label for="profilePhone">Phone *</label><input type="tel" id="profilePhone" value="${esc(u.phone || "")}" maxlength="10" inputmode="numeric" /></div>
         <p class="form-error" id="profileError" hidden></p>
         <button class="btn btn-gold" data-action="save-profile">Save Changes</button>
+        ${u.role !== "admin" ? `
+  <div class="danger-zone">
+    <h3>Delete Account</h3>
+    <p>Deleting your account will sign you out and remove it from active accounts. Your account history will be retained securely.</p>
+    <button class="btn btn-outline-red" data-action="delete-account">Delete My Account</button>
+  </div>
+` : ""}
       </div>
 
       <div class="profile-card">
@@ -1315,7 +1322,34 @@ async function savePassword() {
   showToast("Password updated.", "success");
   renderProfileView();
 }
+async function deleteAccount() {
+  const user = state.currentUser;
+  if (!user || user.role === "admin") return;
 
+  const confirmed = confirm(
+    "Are you sure you want to delete your account?\n\n" +
+    "Your account will be disabled and removed from active accounts. " +
+    "This action cannot be undone."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await api("/auth/delete-account", { method: "POST" });
+  } catch (err) {
+    showToast(err.message, "error");
+    return;
+  }
+
+  state.currentUser = null;
+  state.guestBrowsing = false;
+  state.pendingContactHostelId = null;
+  state.pendingContactAction = null;
+  state.deletedUsers = [];
+
+  showLandingScreen();
+  showToast("Your account has been deleted successfully.", "success");
+}
 /* ---------------------- Modals: hostel detail & compare ---------------------- */
 
 let lastFocusedElement = null;
@@ -2999,6 +3033,7 @@ const ACTIONS = {
   "reset-data": () => resetData(),
   "save-profile": () => saveProfile(),
   "save-password": () => savePassword(),
+  "delete-account": () => deleteAccount(), 
   "upload-image-trigger": () => document.getElementById("listingImageFile").click(),
   "search-listing-location": () => searchListingLocation()
 };
