@@ -870,7 +870,7 @@ def current_user():
         return None
 
     row = get_db().execute("SELECT * FROM users WHERE id=%s", (uid,)).fetchone()
-    if not row or row["status"] != "active":
+    if not row or row["status"] != "active" or row["deleted_at"] is not None:
         session.clear()
         return None
 
@@ -1556,6 +1556,30 @@ def api_update_profile():
     row = db.execute("SELECT * FROM users WHERE id=%s", (user["id"],)).fetchone()
     return jsonify({"user": user_public(row)})
 
+@app.post("/api/auth/delete-account")
+def api_delete_account():
+    """Soft-delete the currently authenticated student or owner account."""
+    user, err = require_login()
+    if err:
+        return err
+
+    if user["role"] == "admin":
+        return error("Administrator accounts cannot be deleted.", 403)
+
+    db = get_db()
+
+    db.execute(
+        "UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE id = %s",
+        (user["id"],)
+    )
+    db.commit()
+
+    session.clear()
+
+    return jsonify({
+        "ok": True,
+        "message": "Your account has been deleted successfully."
+    })
 
 @app.put("/api/auth/password")
 def api_update_password():
