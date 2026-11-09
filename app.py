@@ -1854,7 +1854,40 @@ def api_respond_inquiry(inquiry_id):
 # ---------------------------------------------------------------- #
 # Admin: users, export, reset
 # ---------------------------------------------------------------- #
+@app.get("/api/admin/deleted-users")
+def api_deleted_users():
+    """Return soft-deleted student and owner accounts for administrators."""
+    _, err = require_role("admin")
+    if err:
+        return err
 
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT id, name, username, email, phone, role, joined, status, deleted_at
+        FROM users
+        WHERE deleted_at IS NOT NULL
+          AND role IN ('student', 'owner')
+        ORDER BY deleted_at DESC, id DESC
+        """
+    ).fetchall()
+
+    return jsonify({
+        "users": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "username": row["username"],
+                "email": row["email"],
+                "phone": row["phone"],
+                "role": row["role"],
+                "joined": str(row["joined"]),
+                "status": row["status"],
+                "deletedAt": row["deleted_at"].isoformat() if row["deleted_at"] else None,
+            }
+            for row in rows
+        ]
+    })
 @app.put("/api/users/<int:user_id>/toggle-status")
 def api_toggle_user_status(user_id):
     _, err = require_role("admin")
