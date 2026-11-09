@@ -1053,7 +1053,9 @@ def api_state():
     """
 
     if role == "admin":
-        user_rows = db.execute("SELECT * FROM users ORDER BY id").fetchall()
+    user_rows = db.execute(
+        "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY id"
+    ).fetchall()
         users = [user_public(r) for r in user_rows]
         hostels = [
             hostel_public(r)
