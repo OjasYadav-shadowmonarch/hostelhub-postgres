@@ -406,7 +406,8 @@ CREATE TABLE IF NOT EXISTS users (
     status TEXT NOT NULL DEFAULT 'active',
     password_hash TEXT NOT NULL
 );
-
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL DEFAULT NULL;
 CREATE TABLE IF NOT EXISTS hostels (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -870,7 +871,7 @@ def current_user():
         return None
 
     row = get_db().execute("SELECT * FROM users WHERE id=%s", (uid,)).fetchone()
-    if not row or row["status"] != "active":
+    if not row or row["status"] != "active" or row["deleted_at"] is not None:
         session.clear()
         return None
 
@@ -1052,7 +1053,9 @@ def api_state():
     """
 
     if role == "admin":
-        user_rows = db.execute("SELECT * FROM users ORDER BY id").fetchall()
+    user_rows = db.execute(
+        "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY id"
+    ).fetchall()
         users = [user_public(r) for r in user_rows]
         hostels = [
             hostel_public(r)
@@ -1392,7 +1395,7 @@ def api_login():
 
     db = get_db()
     row = db.execute(
-        "SELECT * FROM users WHERE lower(username)=lower(%s)",
+        "SELECT * FROM users WHERE lower(username)=lower(%s) AND deleted_at IS NULL",
         (username,)
     ).fetchone()
 
@@ -1556,6 +1559,30 @@ def api_update_profile():
     row = db.execute("SELECT * FROM users WHERE id=%s", (user["id"],)).fetchone()
     return jsonify({"user": user_public(row)})
 
+@app.post("/api/auth/delete-account")
+def api_delete_account():
+    """Soft-delete the currently authenticated student or owner account."""
+    user, err = require_login()
+    if err:
+        return err
+
+    if user["role"] == "admin":
+        return error("Administrator accounts cannot be deleted.", 403)
+
+    db = get_db()
+
+    db.execute(
+        "UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE id = %s",
+        (user["id"],)
+    )
+    db.commit()
+
+    session.clear()
+
+    return jsonify({
+        "ok": True,
+        "message": "Your account has been deleted successfully."
+    })
 
 @app.put("/api/auth/password")
 def api_update_password():
@@ -1827,7 +1854,40 @@ def api_respond_inquiry(inquiry_id):
 # ---------------------------------------------------------------- #
 # Admin: users, export, reset
 # ---------------------------------------------------------------- #
+@app.get("/api/admin/deleted-users")
+def api_deleted_users():
+    """Return soft-deleted student and owner accounts for administrators."""
+    _, err = require_role("admin")
+    if err:
+        return err
 
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT id, name, username, email, phone, role, joined, status, deleted_at
+        FROM users
+        WHERE deleted_at IS NOT NULL
+          AND role IN ('student', 'owner')
+        ORDER BY deleted_at DESC, id DESC
+        """
+    ).fetchall()
+
+    return jsonify({
+        "users": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "username": row["username"],
+                "email": row["email"],
+                "phone": row["phone"],
+                "role": row["role"],
+                "joined": str(row["joined"]),
+                "status": row["status"],
+                "deletedAt": row["deleted_at"].isoformat() if row["deleted_at"] else None,
+            }
+            for row in rows
+        ]
+    })
 @app.put("/api/users/<int:user_id>/toggle-status")
 def api_toggle_user_status(user_id):
     _, err = require_role("admin")

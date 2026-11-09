@@ -86,6 +86,7 @@ function emptyState() {
     pendingContactAction: null,
     ownerSubtab: "listings",
     adminSubtab: "approval",
+    deletedUsers: [],
     studentSubtab: "find",
     typeFilter: "all",
     searchQuery: "",
@@ -1223,6 +1224,13 @@ function renderProfileView() {
         <div class="field-group"><label for="profilePhone">Phone *</label><input type="tel" id="profilePhone" value="${esc(u.phone || "")}" maxlength="10" inputmode="numeric" /></div>
         <p class="form-error" id="profileError" hidden></p>
         <button class="btn btn-gold" data-action="save-profile">Save Changes</button>
+        ${u.role !== "admin" ? `
+  <div class="danger-zone">
+    <h3>Delete Account</h3>
+    <p>Deleting your account will sign you out and remove it from active accounts. Your account history will be retained securely.</p>
+    <button class="btn btn-outline-red" data-action="delete-account">Delete My Account</button>
+  </div>
+` : ""}
       </div>
 
       <div class="profile-card">
@@ -1314,7 +1322,34 @@ async function savePassword() {
   showToast("Password updated.", "success");
   renderProfileView();
 }
+async function deleteAccount() {
+  const user = state.currentUser;
+  if (!user || user.role === "admin") return;
 
+  const confirmed = confirm(
+    "Are you sure you want to delete your account?\n\n" +
+    "Your account will be disabled and removed from active accounts. " +
+    "This action cannot be undone."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await api("/auth/delete-account", { method: "POST" });
+  } catch (err) {
+    showToast(err.message, "error");
+    return;
+  }
+
+  state.currentUser = null;
+  state.guestBrowsing = false;
+  state.pendingContactHostelId = null;
+  state.pendingContactAction = null;
+  state.deletedUsers = [];
+
+  showLandingScreen();
+  showToast("Your account has been deleted successfully.", "success");
+}
 /* ---------------------- Modals: hostel detail & compare ---------------------- */
 
 let lastFocusedElement = null;
@@ -2327,12 +2362,14 @@ function renderAdminView() {
       <button class="subtab ${state.adminSubtab === "properties" ? "active" : ""}" data-action="admin-subtab" data-id="properties">All Properties</button>
       <button class="subtab ${state.adminSubtab === "users" ? "active" : ""}" data-action="admin-subtab" data-id="users">Users</button>
       <button class="subtab ${state.adminSubtab === "reports" ? "active" : ""}" data-action="admin-subtab" data-id="reports">Reports</button>
+      <button class="subtab ${state.adminSubtab === "deleted" ? "active" : ""}" data-action="admin-subtab" data-id="deleted">Deleted Accounts</button>
     </div>`;
 
   let content;
   if (state.adminSubtab === "properties") content = adminPropertiesHTML();
   else if (state.adminSubtab === "users") content = adminUsersHTML();
   else if (state.adminSubtab === "reports") content = adminReportsHTML();
+  else if (state.adminSubtab === "deleted") content = adminDeletedUsersHTML();   
   else content = adminApprovalHTML(pending);
 
   root.innerHTML = `
@@ -2357,12 +2394,23 @@ function renderAdminView() {
   `;
 }
 
-function adminSubtabSwitch(id) {
+async function adminSubtabSwitch(id) {
   state.adminSubtab = id;
+
+  if (id === "deleted") {
+    try {
+      const data = await api("/admin/deleted-users");
+      state.deletedUsers = data.users || [];
+    } catch (err) {
+      state.deletedUsers = [];
+      showToast(err.message, "error");
+    }
+  }
+
   renderAdminView();
+
   if (id === "reports") animateBars();
 }
-
 function adminApprovalHTML(pending) {
   if (!pending.length) {
     return `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up</div><div>There are no listings waiting for approval.</div></div>`;
@@ -2455,6 +2503,74 @@ function adminUsersHTML() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+function adminDeletedUsersHTML() {
+  const users = state.deletedUsers || [];
+
+  if (!users.length) {
+    return `
+      <div class="empty-state">
+        <div class="empty-icon">🗑️</div>
+        <div class="empty-title">No deleted accounts</div>
+        <div>Deleted student and owner accounts will appear here.</div>
+      </div>
+    `;
+  }
+
+  const rows = users.map(u => {
+    const roleBadge = u.role === "owner"
+      ? `<span class="badge badge-gray">Owner</span>`
+      : `<span class="badge badge-gray">Student</span>`;
+
+    const deletedAt = u.deletedAt
+      ? new Date(u.deletedAt).toLocaleString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        })
+      : "—";
+
+    return `
+      <tr>
+        <td>
+          <div class="cell-property">
+            <div class="avatar" style="width:34px;height:34px;font-size:11px;">
+              ${initials(u.name)}
+            </div>
+            <div>
+              <div class="cell-title">${esc(u.name)}</div>
+              <div class="cell-sub">${esc(u.username)}</div>
+            </div>
+          </div>
+        </td>
+        <td>${esc(u.email || "—")}</td>
+        <td>${roleBadge}</td>
+        <td>${formatDate(u.joined)}</td>
+        <td>${esc(deletedAt)}</td>
+        <td><span class="badge badge-gray">Deleted</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Deleted accounts table">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Joined</th>
+            <th>Deleted At</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function adminReportsHTML() {
@@ -2917,6 +3033,7 @@ const ACTIONS = {
   "reset-data": () => resetData(),
   "save-profile": () => saveProfile(),
   "save-password": () => savePassword(),
+  "delete-account": () => deleteAccount(), 
   "upload-image-trigger": () => document.getElementById("listingImageFile").click(),
   "search-listing-location": () => searchListingLocation()
 };

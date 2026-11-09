@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK(role IN ('student','owner','admin')),
     joined DATE NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
-    password_hash TEXT NOT NULL
+    password_hash TEXT NOT NULL,
+    deleted_at TIMESTAMP NULL DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS hostels (
